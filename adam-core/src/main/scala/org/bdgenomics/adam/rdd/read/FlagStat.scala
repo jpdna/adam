@@ -18,6 +18,8 @@
 package org.bdgenomics.adam.rdd.read
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
+import org.bdgenomics.adam.dataset.FlagStatAlignmentRecordFields
 import org.bdgenomics.adam.util.Util._
 import org.bdgenomics.formats.avro.AlignmentRecord
 
@@ -90,7 +92,9 @@ case class FlagStatMetrics(total: Long, duplicatesPrimary: DuplicateMetrics, dup
 object FlagStat {
 
   def b2i(boolean: Boolean) = if (boolean) 1 else 0
+
   def b(boolean: java.lang.Boolean) = Option(boolean).exists(x => x)
+
   def i(int: java.lang.Integer): Int = Option(int).map(Integer2int).getOrElse(-1)
 
   def apply(rdd: RDD[AlignmentRecord]) = {
@@ -129,3 +133,42 @@ object FlagStat {
     )
   }
 }
+/*
+  def apply(dataset: Dataset[FlagStatAlignmentRecordFields]) = {
+    dataset.map {
+      p =>
+        val mateMappedToDiffChromosome =
+          p.readPaired && p.readMapped && p.mateMapped && !isSameContig(p.contigName, p.mateContigName)
+        val (primaryDuplicates, secondaryDuplicates) = DuplicateMetrics(p)
+        new FlagStatMetrics(
+          1,
+          primaryDuplicates, secondaryDuplicates,
+          b2i(b(p.readMapped)),
+          b2i(b(p.readPaired) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(p.readPaired) && p.readInFragment == 0 && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(p.readPaired) && p.readInFragment == 1 && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(p.readPaired) && b(p.properPair) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(p.readPaired) && b(p.readMapped) && b(p.mateMapped) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(p.readPaired) && b(p.readMapped) && b(!p.mateMapped) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(mateMappedToDiffChromosome) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          b2i(b(mateMappedToDiffChromosome && i(p.mapq) >= 5) && b(!p.supplementaryAlignment) && p.primaryAlignment),
+          p.failedVendorQualityChecks
+        )
+    }.rdd.aggregate((FlagStatMetrics.emptyFailedQuality, FlagStatMetrics.emptyPassedQuality))(
+      seqOp = {
+        (a, b) =>
+          if (b.failedQuality) {
+            (a._1 + b, a._2)
+          } else {
+            (a._1, a._2 + b)
+          }
+      },
+      combOp = {
+        (a, b) =>
+          (a._1 + b._1, a._2 + b._2)
+      }
+    )
+  }
+
+}
+*/ 
