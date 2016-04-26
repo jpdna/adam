@@ -125,55 +125,72 @@ object MarkDuplicatesDSSlow extends Serializable with Logging {
             val (mapped, unmapped) = reads.partition(_.readMapped)
             val (primaryMapped, secondaryMapped) = mapped.partition(_.primaryAlignment)
             val curr_bucket = SingleReadBucketDS(primaryMapped.toSeq, secondaryMapped.toSeq, unmapped.toSeq)
-            (ReferencePositionPairDS(curr_bucket), curr_bucket)
+            val myRefPosPair = (ReferencePositionPairDS(curr_bucket), curr_bucket)
+
+            val currARSeqholder = AlignmentRecordSeqHolder(curr_bucket.allReads)
+
+            val pos = currARSeqholder.myreads(0).start
+
+            val currPosition2 = if (curr_bucket.allReads.head.recordGroupName != null) {
+              (myRefPosPair._1.read1refPos, rgd(curr_bucket.allReads.head.recordGroupName).library.getOrElse(null))
+            } else {
+              (myRefPosPair._1.read1refPos, null)
+            }
+
+            (currPosition2, curr_bucket)
+            //(ReferencePositionPairDS(curr_bucket), curr_bucket)
           }
       }
-      .groupBy(leftPositionAndLibrary(_, rgd))
-      .flatMapGroups {
-        case ((referencePosition: Option[ReferencePositionDS], recordGroupName: String), myreads: Iterator[(ReferencePositionPairDS, SingleReadBucketDS)]) => {
-          val leftPos: Option[ReferencePositionDS] = referencePosition
-          val readsAtLeftPos: Iterable[(ReferencePositionPairDS, SingleReadBucketDS)] = myreads.toSeq
-          leftPos match {
+      .groupBy(_._1).flatMapGroups {
+        //case ((referencePosition: Option[ReferencePositionDS], recordGroupName: String), myreads: Iterator[(ReferencePositionPairDS, SingleReadBucketDS)]) => {
+        (poskey: (Option[ReferencePositionDS], String), myreads: Iterator[((Option[ReferencePositionDS], String), SingleReadBucketDS)]) =>
+          {
 
-            // These are all unmapped reads. There is no way to determine if they are duplicates
-            case None =>
-              markReads(readsAtLeftPos, areDups = false)
+            val leftPos: Option[ReferencePositionDS] = poskey._1
+            val readsAtLeftPos: Seq[(ReferencePositionPairDS, SingleReadBucketDS)] = myreads.map(x => (ReferencePositionPairDS(x._2), x._2)).toSeq
 
-            // These reads have their left position mapped
-            case Some(leftPosWithOrientation) =>
+            //val readsAtLeftPos: Iterable[(Option[ReferencePositionDS, String)], SingleReadBucketDS)] = myreads.toSeq
+            leftPos match {
 
-              val readsByRightPos = readsAtLeftPos.groupBy(rightPosition)
+              // These are all unmapped reads. There is no way to determine if they are duplicates
+              case None =>
+                markReads(readsAtLeftPos, areDups = false)
 
-              val groupCount = readsByRightPos.size
+              // These reads have their left position mapped
+              case Some(leftPosWithOrientation) =>
 
-              readsByRightPos.foreach(e => {
+                val readsByRightPos = readsAtLeftPos.groupBy(rightPosition)
 
-                val rightPos = e._1
-                val reads = e._2
+                val groupCount = readsByRightPos.size
 
-                val groupIsFragments = rightPos.isEmpty
+                readsByRightPos.foreach(e => {
 
-                // We have no pairs (only fragments) if the current group is a group of fragments
-                // and there is only one group in total
-                val onlyFragments = groupIsFragments && groupCount == 1
+                  val rightPos = e._1
+                  val reads = e._2
 
-                // If there are only fragments then score the fragments. Otherwise, if there are not only
-                // fragments (there are pairs as well) mark all fragments as duplicates.
-                // If the group does not contain fragments (it contains pairs) then always score it.
-                if (onlyFragments || !groupIsFragments) {
-                  // Find the highest-scoring read and mark it as not a duplicate. Mark all the other reads in this group as duplicates.
-                  val highestScoringRead = reads.max(ScoreOrdering)
-                  markReadsInBucket(highestScoringRead._2, primaryAreDups = false, secondaryAreDups = true)
-                  markReads(reads, primaryAreDups = true, secondaryAreDups = true, ignore = Some(highestScoringRead))
-                } else {
-                  markReads(reads, areDups = true)
+                  val groupIsFragments = rightPos.isEmpty
+
+                  // We have no pairs (only fragments) if the current group is a group of fragments
+                  // and there is only one group in total
+                  val onlyFragments = groupIsFragments && groupCount == 1
+
+                  // If there are only fragments then score the fragments. Otherwise, if there are not only
+                  // fragments (there are pairs as well) mark all fragments as duplicates.
+                  // If the group does not contain fragments (it contains pairs) then always score it.
+                  if (onlyFragments || !groupIsFragments) {
+                    // Find the highest-scoring read and mark it as not a duplicate. Mark all the other reads in this group as duplicates.
+                    val highestScoringRead = reads.max(ScoreOrdering)
+                    markReadsInBucket(highestScoringRead._2, primaryAreDups = false, secondaryAreDups = true)
+                    markReads(reads, primaryAreDups = true, secondaryAreDups = true, ignore = Some(highestScoringRead))
+                  } else {
+                    markReads(reads, areDups = true)
+                  }
                 }
-              }
-              )
-          }
+                )
+            }
 
-          readsAtLeftPos.flatMap(read => { read._2.allReads })
-        }
+            readsAtLeftPos.flatMap(read => { read._2.allReads })
+          }
 
       }
 
