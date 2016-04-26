@@ -11,9 +11,10 @@ import org.bdgenomics.adam.models.RecordGroupDictionary
 import org.bdgenomics.adam.rich.RichAlignmentRecord
 import org.bdgenomics.formats.avro.AlignmentRecord
 
-case class AlignmentRecordSeqHolder(myreads: Seq[AlignmentRecordLimitProjDS] = Seq.empty)
+// Already defined in MarkDuplicatesDS
+//case class AlignmentRecordSeqHolder(myreads: Seq[AlignmentRecordLimitProjDS] = Seq.empty)
 
-object MarkDuplicatesDS extends Serializable with Logging {
+object MarkDuplicatesDSSlow extends Serializable with Logging {
 
   // Calculates the sum of the phred scores that are greater than or equal to 15
   def score(r: AlignmentRecordLimitProjDS): Int = {
@@ -85,68 +86,64 @@ object MarkDuplicatesDS extends Serializable with Logging {
   def markduplicates(df: DataFrame,
                      rgd: RecordGroupDictionary, sqlContext: SQLContext) = {
 
-    import sqlContext.implicits._
+    val emptyRgs = rgd.recordGroups
+      .filter(_.library.isEmpty)
+
+    emptyRgs.foreach(rg => {
+      log.warn("Library ID is empty for record group %s from sample %s.".format(rg.recordGroupName,
+        rg.sample))
+    })
+
+    if (emptyRgs.nonEmpty) {
+      log.warn("For duplicate marking, all reads whose library is unknown will be treated as coming from the same library.")
+    }
+
+    // Group by library and left position
+
+    def leftPositionAndLibrary(p: (ReferencePositionPairDS, SingleReadBucketDS),
+                               rgd: RecordGroupDictionary): (Option[ReferencePositionDS], String) = {
+      //val curr_refpospair = ReferencePositionPairDS(p)
+      if (p._2.allReads.head.recordGroupName != null) {
+        (p._1.read1refPos, rgd(p._2.allReads.head.recordGroupName).library.getOrElse(null))
+      } else {
+        (p._1.read1refPos, null)
+      }
+    }
 
     def rightPosition(p: (ReferencePositionPairDS, SingleReadBucketDS)): Option[ReferencePositionDS] = {
       p._1.read2refPos
     }
 
-    df.as[AlignmentRecordLimitProjDS].groupBy(p => (p.recordGroupName, p.readName)).mapGroups {
-      (k, reads: Iterator[AlignmentRecordLimitProjDS]) =>
-        {
+    import sqlContext.implicits._
 
-          val (mapped, unmapped) = reads.partition(_.readMapped)
-          val (primaryMapped, secondaryMapped) = mapped.partition(_.primaryAlignment)
-          val curr_bucket = SingleReadBucketDS(primaryMapped.toSeq, secondaryMapped.toSeq, unmapped.toSeq)
-          val myRefPosPair = (ReferencePositionPairDS(curr_bucket), curr_bucket)
+    import sqlContext.implicits._
 
-          val currARSeqholder = AlignmentRecordSeqHolder(curr_bucket.allReads)
-
-          val pos = currARSeqholder.myreads(0).start
-
-          val currPosition2 = if (curr_bucket.allReads.head.recordGroupName != null) {
-            (myRefPosPair._1.read1refPos, rgd(curr_bucket.allReads.head.recordGroupName).library.getOrElse(null))
-          } else {
-            (myRefPosPair._1.read1refPos, null)
-          }
-
-          // NOTE:
-          // The reason that the currARSeqholder: AlignmentRecordSeqHolder
-          // is returned below and passed to the subsequent groupBy (where it is again split into three lists
-          // for primaryMapped, secondaryMapped, unampped),
-          // rather than returning the curr_bucket: SingleReadBucketDS which was in code above,
-          // is motivated only by performance.  It appears that passing a single Seq[AlignmentRecordLimitProj]
-          // is more than twice as fast in total performance of MarkDuplicates than passing the same data
-          // when it is split into three different Seq (primaryMapped, SecondaryMapped, unmapped)
-          // This is true both is the three Seqs are nested in a SingleReadBucketDS or returned as unnested members
-          // of a tuple
-          // At this point my guess is that this performance difference is an artifact of how the Dataste API
-          // encoder works
-
-          (currPosition2, currARSeqholder)
-        }
-    }.groupBy(_._1).flatMapGroups {
-      (poskey: (Option[ReferencePositionDS], String), myreads: Iterator[((Option[ReferencePositionDS], String), AlignmentRecordSeqHolder)]) =>
-        {
-
-          //make the SingleReadBuckets
-          val readsAtLeftPos: Seq[(ReferencePositionPairDS, SingleReadBucketDS)] = myreads.map(x => {
-            val (mapped, unmapped) = x._2.myreads.partition(_.readMapped)
+    df.as[AlignmentRecordLimitProjDS].groupBy(p => (p.recordGroupName, p.readName))
+      .mapGroups {
+        (k, reads: Iterator[AlignmentRecordLimitProjDS]) =>
+          {
+            val (mapped, unmapped) = reads.partition(_.readMapped)
             val (primaryMapped, secondaryMapped) = mapped.partition(_.primaryAlignment)
             val curr_bucket = SingleReadBucketDS(primaryMapped.toSeq, secondaryMapped.toSeq, unmapped.toSeq)
-            val myRefPosPair = ReferencePositionPairDS(curr_bucket)
-            (myRefPosPair, curr_bucket)
-          }).toSeq
-
-          val leftPos = poskey._1
-
+            (ReferencePositionPairDS(curr_bucket), curr_bucket)
+          }
+      }
+      .groupBy(leftPositionAndLibrary(_, rgd))
+      .flatMapGroups {
+        case ((referencePosition: Option[ReferencePositionDS], recordGroupName: String), myreads: Iterator[(ReferencePositionPairDS, SingleReadBucketDS)]) => {
+          val leftPos: Option[ReferencePositionDS] = referencePosition
+          val readsAtLeftPos: Iterable[(ReferencePositionPairDS, SingleReadBucketDS)] = myreads.toSeq
           leftPos match {
 
+            // These are all unmapped reads. There is no way to determine if they are duplicates
             case None =>
               markReads(readsAtLeftPos, areDups = false)
 
+            // These reads have their left position mapped
             case Some(leftPosWithOrientation) =>
+
               val readsByRightPos = readsAtLeftPos.groupBy(rightPosition)
+
               val groupCount = readsByRightPos.size
 
               readsByRightPos.foreach(e => {
@@ -175,13 +172,11 @@ object MarkDuplicatesDS extends Serializable with Logging {
               )
           }
 
-          readsAtLeftPos.flatMap(read => {
-            read._2.allReads
-          })
-
+          readsAtLeftPos.flatMap(read => { read._2.allReads })
         }
 
-    }
+      }
+
   }
 
   private object ScoreOrdering extends Ordering[(ReferencePositionPairDS, SingleReadBucketDS)] {
