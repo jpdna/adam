@@ -54,7 +54,7 @@ class GenotypeRDDFunctions(rdd: RDD[Genotype]) extends Serializable with Logging
 
   def filterByOverlappingRegion(query: ReferenceRegion): RDD[Genotype] = {
     def overlapsQuery(rec: Genotype): Boolean =
-      rec.getVariant.getContig.getContigName == query.referenceName &&
+      rec.getVariant.getContigName == query.referenceName &&
         rec.getVariant.getStart < query.end &&
         rec.getVariant.getEnd > query.start
     rdd.filter(overlapsQuery)
