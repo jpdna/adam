@@ -251,18 +251,20 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
     annotations: VariantCallingAnnotations,
     setPL: (htsjdk.variant.variantcontext.Genotype, Genotype.Builder) => Unit): Seq[Genotype] = {
 
-    // get contig name/start/end and null out
+    // dupe variant, get contig name/start/end and null out
     val contigName = variant.getContigName
     val start = variant.getStart
     val end = variant.getEnd
-    variant.setContigName(null)
-    variant.setStart(null)
-    variant.setEnd(null)
+    val newVariant = Variant.newBuilder(variant)
+      .setContigName(null)
+      .setStart(null)
+      .setEnd(null)
+      .build()
 
     val genotypes: Seq[Genotype] = vc.getGenotypes.map(
       (g: htsjdk.variant.variantcontext.Genotype) => {
         val genotype: Genotype.Builder = Genotype.newBuilder
-          .setVariant(variant)
+          .setVariant(newVariant)
           .setContigName(contigName)
           .setStart(start)
           .setEnd(end)
