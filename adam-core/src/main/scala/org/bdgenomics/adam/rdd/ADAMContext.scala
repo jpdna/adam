@@ -516,6 +516,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    *   not Parquet.
    * @see loadAlignments
    */
+
   def loadParquetAlignments(
     filePath: String,
     predicate: Option[FilterPredicate] = None,

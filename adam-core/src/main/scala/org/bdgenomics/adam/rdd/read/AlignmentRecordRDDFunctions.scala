@@ -142,8 +142,7 @@ private[rdd] class AlignmentRecordRDDFunctions(val rdd: RDD[AlignmentRecord])
     // and write the sequence dictionary and record group dictionary to disk
     saveAvro("%s/_seqdict.avro".format(args.outputPath),
       rdd.context,
-      Contig.SCHEMA$,
-      contigs)
+      Contig.SCHEMA$, contigs)
     saveAvro("%s/_rgdict.avro".format(args.outputPath),
       rdd.context,
       RecordGroupMetadata.SCHEMA$,

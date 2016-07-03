@@ -391,7 +391,7 @@
         <groupId>org.bdgenomics.utils</groupId>
         <artifactId>utils-misc_2.10</artifactId>
         <version>${bdg-utils.version}</version>
-         <exclusions>
+        <exclusions>
           <exclusion>
             <groupId>org.apache.spark</groupId>
             <artifactId>*</artifactId>
@@ -574,6 +574,40 @@
       </dependency>
 
 
+
+
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-streaming_2.10</artifactId>
+        <version>${spark.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-streaming_2.10</artifactId>
+        <version>${spark.version}</version>
+        <type>test-jar</type>
+        <classifier>tests</classifier>
+        <scope>test</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-hadoop2-compat</artifactId>
+        <version>1.2.0-cdh5.7.1</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-server</artifactId>
+        <version>1.2.0-cdh5.7.1</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-it</artifactId>
+        <version>1.2.0-cdh5.7.1</version>
+      </dependency>
 
       <dependency>
         <groupId>org.apache.hbase</groupId>
