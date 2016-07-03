@@ -79,9 +79,10 @@ object HbaseFunctions {
 
   }
 
-  def saveHbaseAlignments(sc: SparkContext, aRdd: AlignmentRecordRDD): Unit = {
+  def saveHbaseAlignments(sc: SparkContext, aRdd: AlignmentRecordRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, hbaseStagingFolder: String): Unit = {
     val rdd1 = aRdd.rdd
-    val stagingFolder = "hdfs://x2.justin.org:8020/user/justin/jptemp5"
+    //val stagingFolder = "hdfs://x2.justin.org:8020/user/justin/jptemp5"
+    val stagingFolder = hbaseStagingFolder
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -98,13 +99,13 @@ object HbaseFunctions {
         encoder.flush()
         baos.flush()
 
-        (myRowKey, Bytes.toBytes("jpcf1"), Bytes.toBytes("myAvro"), baos.toByteArray())
+        (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray())
       }).iterator
     }
     )
 
     rdd1Bytes.hbaseBulkLoad(hbaseContext,
-      TableName.valueOf("jptest1"),
+      TableName.valueOf(hbaseTableName),
       t => {
         val rowKey = t._1
         val family: Array[Byte] = t._2
@@ -115,21 +116,22 @@ object HbaseFunctions {
       },
       stagingFolder)
 
-    "hadoop fs -chmod -R 777 /user/justin/jptemp5" !
+    ("hadoop fs -chmod -R 777 " + stagingFolder) !
 
-    val table = new HTable(conf, "jptest1")
+    val table = new HTable(conf, hbaseTableName)
     val bulkLoader = new LoadIncrementalHFiles(conf)
     bulkLoader.doBulkLoad(new Path(stagingFolder), table)
   }
 
-  def loadHbaseAlignments(tableName: String, sampleName: String, sc: SparkContext): RDD[AlignmentRecord] = {
+  def loadHbaseAlignments(sc: SparkContext, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): RDD[AlignmentRecord] = {
+
     val scan = new Scan()
     scan.setCaching(100)
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
-    scan.addColumn(Bytes.toBytes(sampleName), Bytes.toBytes("myAvro"))
-    val getRDD = hbaseContext.hbaseRDD(TableName.valueOf(tableName), scan)
+    scan.addColumn(Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol))
+    val getRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
     getRDD.map(v => {
       v._2.advance()
