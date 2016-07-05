@@ -94,7 +94,7 @@ object HbaseFunctions {
       val myList = iterator.toList
       myList.map((putRecord) => {
         baos.reset()
-        val myRowKey = (Bytes.toBytes(putRecord.getContigName.toString + "_" + String.format("%10s", putRecord.getStart.toString).replace(' ', '0')))
+        val myRowKey = (Bytes.toBytes(putRecord.getContigName.toString + "_" + String.format("%10s", putRecord.getStart.toString).replace(' ', '0') + "_" + putRecord.getReadName) + putRecord. )
         alignmentRecordDatumWriter.write(putRecord, encoder)
         encoder.flush()
         baos.flush()
@@ -123,14 +123,18 @@ object HbaseFunctions {
     bulkLoader.doBulkLoad(new Path(stagingFolder), table)
   }
 
-  def loadHbaseAlignments(sc: SparkContext, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): RDD[AlignmentRecord] = {
+  def loadHbaseAlignments(sc: SparkContext, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, start: String, stop: String): RDD[AlignmentRecord] = {
 
     val scan = new Scan()
+
     scan.setCaching(100)
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
     scan.addColumn(Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol))
+    scan.setStartRow(Bytes.toBytes(start))
+    scan.setStopRow(Bytes.toBytes(stop))
+
     val getRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
     getRDD.map(v => {
