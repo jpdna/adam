@@ -225,28 +225,6 @@ def computeBins(x: SAMRecordWritable): List[(BinnedRefPos, SAMRecordWritable)] =
   }
 }
 
-
-val myRDD_bins_overlap = reads.flatMap(x => {
-  val alignmentStart = x.get.getAlignmentStart
-  val alignmentEnd = x.get.getAlignmentEnd
-
-  val rbin_start = (alignmentStart / 100000) * 100000
-  val rbin_end = rbin_start + 100000
-  val rbin = rbin_start / 100000
-
-  if (x.get.getReferenceName.toString != "*") {
-    if (alignmentEnd > rbin_end) {
-      List((BinnedRefPos(rbin, ReferencePosition(x.get.getReferenceName.toString, x.get.getAlignmentStart)), x),
-        (BinnedRefPos(rbin + 1, ReferencePosition(x.get.getReferenceName.toString, x.get.getAlignmentStart)), x))
-    } else {
-      List((BinnedRefPos(rbin, ReferencePosition(x.get.getReferenceName.toString, x.get.getAlignmentStart)), x))
-    }
-  } else {
-    List()
-  }
-}
-)
-
 val myParitioner = new AlignmentBinPartitioner(binToPartition)
 val variantCalls = reads.flatMap(x => computeBins(x))
                         .repartitionAndSortWithinPartitions(myParitioner)
