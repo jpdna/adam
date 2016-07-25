@@ -254,13 +254,13 @@ object HBaseFunctions {
       })
   }
 
-  def saveHBaseGenotypes(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
+  def saveHBaseGenotypesold(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
     val variantContextRdd = vcRdd.rdd
 
-    val variantContextRddBytes = variantContextRdd.mapPartitions((iterator) => {
+    val variantContextRddBytes: RDD[List[(Array[Byte], Array[Byte], Array[Byte], Array[Byte])]] = variantContextRdd.mapPartitions((iterator) => {
       val myList = iterator.toList
       val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
       val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
@@ -295,7 +295,7 @@ object HBaseFunctions {
   }
 
   /// also need to make a loadHbaseGenotypes that returns a VariantContextRDD
-  def loadHBaseGenotypes(sc: SparkContext, hbaseTableName: String, sampleID: String): RDD[Genotype] = {
+  def loadHBaseGenotypesold(sc: SparkContext, hbaseTableName: String, sampleID: String): RDD[Genotype] = {
     val scan = new Scan()
     scan.setCaching(100)
     scan.setMaxVersions(1)
@@ -324,6 +324,49 @@ object HBaseFunctions {
     }
     )
     result
+  }
+
+  def saveHBaseGenotypesSingleSample(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    val data = vcRdd.rdd
+    val dataGroupedByRowKey = data.groupBy(c => c.variant.variant.getContigName + "_" + c.variant.variant.getStart.toString.replace(' ', '0') + "_" + c.variant.variant.getAlternateAllele)
+
+    val variantContextHBaseRows: RDD[(Array[Byte], Array[Byte], Array[Byte], Array[Byte])] = dataGroupedByRowKey.mapPartitions((iterator) => {
+      //val myList = iterator.toList
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+
+      iterator.map((putRecord) => {
+        //val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" + putRecord.variant.variant.getAlternateAllele)
+        genotypebaos.reset()
+        val myRowKey = Bytes.toBytes(putRecord._1)
+
+        // item.genotypes.toList.head is selected because this function assumes that vcRdd contains only genotypes from a single sample
+        // genotypeAtCurrRowKey contains all the Genotype objects for this sample which have the same rowKey (start position and allele)
+        // This is necessary because some VCF files contain multiple rows with same start position and alt allele
+        val genotypeAtCurrRowKey: Iterable[Genotype] = putRecord._2.map(item => item.genotypes.toList.head)
+
+        val sampleId = genotypeAtCurrRowKey.head.getSampleId
+        genotypeAtCurrRowKey.foreach(genotypeDatumWriter.write(_, genotypeEncoder))
+        genotypeEncoder.flush()
+        genotypebaos.flush()
+
+        (myRowKey, Bytes.toBytes("g"), Bytes.toBytes(sampleId), genotypebaos.toByteArray)
+
+      })
+    })
+
+    variantContextHBaseRows.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1)
+        put.addColumn(putRecord._2, putRecord._3, putRecord._4)
+        put
+      })
+
   }
 
 }
