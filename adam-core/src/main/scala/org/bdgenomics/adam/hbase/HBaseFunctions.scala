@@ -50,7 +50,6 @@ import sys.process._
 object HBaseFunctions {
 
   def saveHBaseAlignmentsPut(sc: SparkContext, aRdd: AlignmentRecordRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): Unit = {
-
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
@@ -83,59 +82,6 @@ object HBaseFunctions {
 
   }
 
-  // Alternative save functions that uses bulk load via map reduce
-  // At the moment, doesn't seem to offer performance advantage, more testing is needed on cluster to assess
-  def saveHBaseAlignmentsBulkLoad(sc: SparkContext, aRdd: AlignmentRecordRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, hbaseStagingFolder: String): Unit = {
-    //val rdd1 = aRdd.rdd.repartition(50).zipWithUniqueId()
-    val rdd1 = aRdd.rdd.zipWithUniqueId()
-    //val stagingFolder = "hdfs://x2.justin.org:8020/user/justin/jptemp5"
-    val stagingFolder = hbaseStagingFolder
-
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-
-    val rdd1Bytes = rdd1.mapPartitions((iterator) => {
-      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
-      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
-      val alignmentRecordDatumWriter: DatumWriter[AlignmentRecord] = new SpecificDatumWriter[AlignmentRecord](scala.reflect.classTag[AlignmentRecord].runtimeClass.asInstanceOf[Class[AlignmentRecord]])
-      val myList = iterator.toList
-      myList.map((putRecord) => {
-        baos.reset()
-        val myRowKey = Bytes.toBytes(putRecord._1.getContigName + "_" + String.format("%10s", putRecord._1.getStart.toString).replace(' ', '0') + "_" + putRecord._2)
-        alignmentRecordDatumWriter.write(putRecord._1, encoder)
-        encoder.flush()
-        baos.flush()
-
-        (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray())
-      }).iterator
-    }
-    )
-
-    val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
-    val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "PREFIX")
-
-    familyHBaseWriterOptions.put(Bytes.toBytes("columnFamily1"), f1Options)
-
-    rdd1Bytes.hbaseBulkLoad(hbaseContext,
-      TableName.valueOf(hbaseTableName),
-      t => {
-        val rowKey = t._1
-        val family: Array[Byte] = t._2
-        val qualifier = t._3
-        val value = t._4
-        val keyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, qualifier)
-        Seq((keyFamilyQualifier, value)).iterator
-      },
-      stagingFolder, familyHBaseWriterOptions,
-      compactionExclude = false,
-      HConstants.DEFAULT_MAX_FILE_SIZE)
-
-    ("hadoop fs -chmod -R 777 " + stagingFolder) !
-    val conn = ConnectionFactory.createConnection(conf)
-    val load = new LoadIncrementalHFiles(conf)
-    load.doBulkLoad(new Path(stagingFolder), conn.getAdmin, conn.getTable(TableName.valueOf(hbaseTableName)), conn.getRegionLocator(TableName.valueOf(hbaseTableName)))
-
-  }
 
   def loadHBaseAlignments(sc: SparkContext, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, start: String = null, stop: String = null): RDD[AlignmentRecord] = {
 
@@ -171,7 +117,6 @@ object HBaseFunctions {
     )
     result
   }
-
 
 
   def saveHBaseGenotypesSingleSample(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
@@ -221,7 +166,6 @@ object HBaseFunctions {
   }
 
 
-
   def loadHBaseGenotypes(sc: SparkContext, hbaseTableName: String, sampleIDs: List[String]): RDD[Genotype] = {
     val scan = new Scan()
     scan.setCaching(100)
@@ -259,6 +203,67 @@ object HBaseFunctions {
 
     result
   }
+
+
+  /*
+// Alternative save functions that uses bulk load via map reduce
+// At the moment, doesn't seem to offer performance advantage, more testing is needed on cluster to assess
+def saveHBaseAlignmentsBulkLoad(sc: SparkContext, aRdd: AlignmentRecordRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, hbaseStagingFolder: String): Unit = {
+  //val rdd1 = aRdd.rdd.repartition(50).zipWithUniqueId()
+  val rdd1 = aRdd.rdd.zipWithUniqueId()
+  //val stagingFolder = "hdfs://x2.justin.org:8020/user/justin/jptemp5"
+  val stagingFolder = hbaseStagingFolder
+
+  val conf = HBaseConfiguration.create()
+  val hbaseContext = new HBaseContext(sc, conf)
+
+  val rdd1Bytes = rdd1.mapPartitions((iterator) => {
+    val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+    val alignmentRecordDatumWriter: DatumWriter[AlignmentRecord] = new SpecificDatumWriter[AlignmentRecord](scala.reflect.classTag[AlignmentRecord].runtimeClass.asInstanceOf[Class[AlignmentRecord]])
+    val myList = iterator.toList
+    myList.map((putRecord) => {
+      baos.reset()
+      val myRowKey = Bytes.toBytes(putRecord._1.getContigName + "_" + String.format("%10s", putRecord._1.getStart.toString).replace(' ', '0') + "_" + putRecord._2)
+      alignmentRecordDatumWriter.write(putRecord._1, encoder)
+      encoder.flush()
+      baos.flush()
+
+      (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray())
+    }).iterator
+  }
+  )
+
+  val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
+  val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "PREFIX")
+
+  familyHBaseWriterOptions.put(Bytes.toBytes("columnFamily1"), f1Options)
+
+  rdd1Bytes.hbaseBulkLoad(hbaseContext,
+    TableName.valueOf(hbaseTableName),
+    t => {
+      val rowKey = t._1
+      val family: Array[Byte] = t._2
+      val qualifier = t._3
+      val value = t._4
+      val keyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, qualifier)
+      Seq((keyFamilyQualifier, value)).iterator
+    },
+    stagingFolder, familyHBaseWriterOptions,
+    compactionExclude = false,
+    HConstants.DEFAULT_MAX_FILE_SIZE)
+
+  ("hadoop fs -chmod -R 777 " + stagingFolder) !
+  val conn = ConnectionFactory.createConnection(conf)
+  val load = new LoadIncrementalHFiles(conf)
+  load.doBulkLoad(new Path(stagingFolder), conn.getAdmin, conn.getTable(TableName.valueOf(hbaseTableName)), conn.getRegionLocator(TableName.valueOf(hbaseTableName)))
+
+}
+
+*/
+
+
+
 
 }
 
