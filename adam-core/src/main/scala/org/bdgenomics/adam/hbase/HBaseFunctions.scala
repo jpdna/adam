@@ -11,6 +11,7 @@ import org.bdgenomics.adam.rdd.ADAMContext
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projection }
 import org.bdgenomics.adam.rdd
+import org.bdgenomics.adam.rdd.variation.VariantContextRDD
 import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
@@ -34,6 +35,10 @@ import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hbase.client.HTable
+
+import org.bdgenomics.formats.avro.Variant
+import org.bdgenomics.formats.avro.Genotype
+import org.bdgenomics.adam.models.VariantContext
 
 import sys.process._
 
@@ -159,6 +164,161 @@ object HBaseFunctions {
           val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal), null)
           myVal.getValueArray()
           alignmentRecordDatumReader.read(null, decoder)
+        })
+      }).iterator
+    }
+    )
+    result
+  }
+
+  def saveHBaseVariants(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): Unit = {
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    val variantContextRdd = vcRdd.rdd
+
+    val variantContextRddBytes = variantContextRdd.mapPartitions((iterator) => {
+      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+      val variantDatumWriter: DatumWriter[Variant] = new SpecificDatumWriter[Variant](scala.reflect.classTag[Variant].runtimeClass.asInstanceOf[Class[Variant]])
+      val myList = iterator.toList
+      myList.map((putRecord) => {
+        baos.reset()
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" + putRecord.variant.variant.getAlternateAllele)
+        variantDatumWriter.write(putRecord.variant.variant, encoder)
+        encoder.flush()
+        baos.flush()
+        (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray)
+      }).iterator
+
+    }
+    )
+
+    variantContextRddBytes.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1)
+        put.addColumn(putRecord._2, putRecord._3, putRecord._4)
+      })
+
+  }
+
+  def saveHBaseVariantsAndGenotypes(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): Unit = {
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    val variantContextRdd = vcRdd.rdd
+
+    val variantContextRddBytes = variantContextRdd.mapPartitions((iterator) => {
+      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+      val variantDatumWriter: DatumWriter[Variant] = new SpecificDatumWriter[Variant](scala.reflect.classTag[Variant].runtimeClass.asInstanceOf[Class[Variant]])
+      val myList = iterator.toList
+
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+
+      myList.map((putRecord) => {
+        baos.reset()
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" + putRecord.variant.variant.getAlternateAllele)
+        variantDatumWriter.write(putRecord.variant.variant, encoder)
+        encoder.flush()
+        baos.flush()
+
+        val resultVariant = (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray)
+
+        val genotypes = putRecord.genotypes
+
+        val genotypesBytesList = genotypes.map(x => {
+          genotypebaos.reset()
+          genotypeDatumWriter.write(x, genotypeEncoder)
+          genotypeEncoder.flush()
+          genotypebaos.flush()
+          (myRowKey, Bytes.toBytes("g"), Bytes.toBytes(hbaseCol), genotypebaos.toByteArray)
+        }).toList
+
+        (resultVariant, genotypesBytesList)
+
+      }).iterator
+
+    }
+    )
+
+    variantContextRddBytes.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1._1)
+        putRecord._2.foreach(x => put.addColumn(x._2, x._3, x._4))
+        put.addColumn(putRecord._1._2, putRecord._1._3, putRecord._1._4)
+      })
+  }
+
+  def saveHBaseGenotypes(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    val variantContextRdd = vcRdd.rdd
+
+    val variantContextRddBytes = variantContextRdd.mapPartitions((iterator) => {
+      val myList = iterator.toList
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+
+      myList.map((putRecord) => {
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" + putRecord.variant.variant.getAlternateAllele)
+        val genotypes = putRecord.genotypes
+        val genotypesBytesList = genotypes.map(x => {
+          genotypebaos.reset()
+          genotypeDatumWriter.write(x, genotypeEncoder)
+          genotypeEncoder.flush()
+          genotypebaos.flush()
+          (myRowKey, Bytes.toBytes("g"), Bytes.toBytes(x.getSampleId), genotypebaos.toByteArray)
+        }).toList
+
+        genotypesBytesList
+
+      }).iterator
+
+    }
+    )
+
+    variantContextRddBytes.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord(0)._1)
+
+        putRecord.foreach(x => put.addColumn(x._2, x._3, x._4))
+        put
+      })
+  }
+
+  /// also need to make a loadHbaseGenotypes that returns a VariantContextRDD
+  def loadHBaseGenotypes(sc: SparkContext, hbaseTableName: String, sampleID: String): RDD[Genotype] = {
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+    scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleID))
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val result: RDD[Genotype] = resultHBaseRDD.mapPartitions((iterator) => {
+      val cf_bytes = Bytes.toBytes("g")
+      val qual_bytes = Bytes.toBytes(sampleID)
+
+      val myList = iterator.toList
+      myList.flatMap((curr) => {
+
+        val myValList = curr._2.getColumnCells(cf_bytes, qual_bytes)
+        myValList.map((myVal) => {
+          val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+          val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal), null)
+          myVal.getValueArray()
+          genotypeDatumReader.read(null, decoder)
         })
       }).iterator
     }
