@@ -40,6 +40,7 @@ import org.bdgenomics.formats.avro.Variant
 import org.bdgenomics.formats.avro.Genotype
 import org.bdgenomics.adam.models.VariantContext
 
+import scala.collection.mutable.ListBuffer
 import sys.process._
 
 /**
@@ -171,6 +172,7 @@ object HBaseFunctions {
     result
   }
 
+  /*
   def saveHBaseVariants(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String): Unit = {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -254,6 +256,9 @@ object HBaseFunctions {
       })
   }
 
+  */
+
+  /*
   def saveHBaseGenotypesold(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -326,6 +331,8 @@ object HBaseFunctions {
     result
   }
 
+  */
+
   def saveHBaseGenotypesSingleSample(sc: SparkContext, vcRdd: VariantContextRDD, hbaseTableName: String): Unit = {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -350,7 +357,10 @@ object HBaseFunctions {
         val genotypeAtCurrRowKey: Iterable[Genotype] = putRecord._2.map(item => item.genotypes.toList.head)
 
         val sampleId = genotypeAtCurrRowKey.head.getSampleId
+
+        //packs multiple genotypes with the the same rowKey into a single HBase value
         genotypeAtCurrRowKey.foreach(genotypeDatumWriter.write(_, genotypeEncoder))
+
         genotypeEncoder.flush()
         genotypebaos.flush()
 
@@ -369,4 +379,80 @@ object HBaseFunctions {
 
   }
 
+  /*
+  def loadHBaseGenotypesSingleSample(sc: SparkContext, hbaseTableName: String, sampleID: String): RDD[Genotype] = {
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+    scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleID))
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val result: RDD[Genotype] = resultHBaseRDD.mapPartitions((iterator) => {
+      iterator.flatMap((curr) => {
+        curr._2.advance()
+        val myVal = curr._2.value
+
+        val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+        val decoder = DecoderFactory.get().binaryDecoder(myVal, null)
+
+        var resultList = new ListBuffer[Genotype]
+
+        while (!decoder.isEnd) {
+          resultList += genotypeDatumReader.read(null, decoder)
+        }
+
+        resultList
+
+      })
+    })
+
+    result
+  }
+  */
+
+  
+
+  def loadHBaseGenotypes(sc: SparkContext, hbaseTableName: String, sampleIDs: List[String]): RDD[Genotype] = {
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    sampleIDs.foreach(sampleId => {
+      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
+    })
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val result: RDD[Genotype] = resultHBaseRDD.mapPartitions((iterator) => {
+      iterator.flatMap((curr) => {
+
+        var resultList = new ListBuffer[Genotype]
+
+        while (curr._2.advance()) {
+          val myVal = curr._2.value
+
+          val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype].runtimeClass.asInstanceOf[Class[Genotype]])
+          val decoder = DecoderFactory.get().binaryDecoder(myVal, null)
+
+          while (!decoder.isEnd) {
+            resultList += genotypeDatumReader.read(null, decoder)
+          }
+        }
+
+        resultList
+
+      })
+    })
+
+    result
+  }
+
 }
+
