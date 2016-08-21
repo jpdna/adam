@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.client.HTable
 import org.bdgenomics.formats.avro.Variant
 import org.bdgenomics.formats.avro.Genotype
 import org.bdgenomics.adam.models.VariantContext
+import org.bdgenomics.formats.avro.{ Contig, RecordGroupMetadata, Sample }
 
 import scala.collection.mutable.ListBuffer
 import sys.process._
@@ -65,11 +66,8 @@ object HBaseFunctions {
         val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
         val encoder = EncoderFactory.get().binaryEncoder(baos, null)
         val alignmentRecordDatumWriter: DatumWriter[AlignmentRecord] =
-          new SpecificDatumWriter[AlignmentRecord](
-            scala.reflect.classTag[AlignmentRecord]
-              .runtimeClass
-              .asInstanceOf[Class[AlignmentRecord]]
-          )
+          new SpecificDatumWriter[AlignmentRecord](scala.reflect.classTag[AlignmentRecord].runtimeClass.asInstanceOf[Class[AlignmentRecord]])
+
         val myList = iterator.toList
         myList.map((putRecord) => {
           baos.reset()
@@ -126,9 +124,7 @@ object HBaseFunctions {
         myValList.map((myVal) => {
 
           val alignmentRecordDatumReader: DatumReader[AlignmentRecord] =
-            new SpecificDatumReader[AlignmentRecord](scala.reflect.classTag[AlignmentRecord]
-              .runtimeClass
-              .asInstanceOf[Class[AlignmentRecord]])
+            new SpecificDatumReader[AlignmentRecord](scala.reflect.classTag[AlignmentRecord].runtimeClass.asInstanceOf[Class[AlignmentRecord]])
 
           val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal), null)
           myVal.getValueArray()
@@ -141,11 +137,33 @@ object HBaseFunctions {
     result
   }
 
-  def saveHBaseSampleMetaData(sc: SparkContext,
+  def saveHBaseSampleMetadata(sc: SparkContext,
                               vcRdd: VariantContextRDD,
                               hbaseTableName: String): Unit = {
 
+    val conf = HBaseConfiguration.create()
+    val connection = ConnectionFactory.createConnection(conf)
+    val table = connection.getTable(TableName.valueOf(hbaseTableName))
+
+    vcRdd.samples.foreach((x) => {
+      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+
+      val sampleDatumWriter: DatumWriter[Sample] =
+        new SpecificDatumWriter[Sample](scala.reflect.classTag[Sample].runtimeClass.asInstanceOf[Class[Sample]])
+      sampleDatumWriter.write(x, encoder)
+      encoder.flush()
+      baos.flush()
+
+      val curr_sampleid = x.getSampleId
+
+      val put = new Put(Bytes.toBytes(curr_sampleid))
+      put.addColumn(Bytes.toBytes("meta"), Bytes.toBytes("sampledata"), baos.toByteArray)
+      table.put(put)
+
+    })
   }
+
 
   def saveHBaseGenotypesSingleSample(sc: SparkContext,
                                      vcRdd: VariantContextRDD,
