@@ -2,7 +2,7 @@ package org.bdgenomics.adam.hbase
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.spark._
@@ -13,7 +13,6 @@ import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projectio
 import org.bdgenomics.adam.rdd
 import org.bdgenomics.adam.rdd.variation.VariantContextRDD
 import org.bdgenomics.formats.avro.AlignmentRecord
-import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
@@ -23,24 +22,18 @@ import org.apache.avro.io.DatumWriter
 import java.io.ByteArrayOutputStream
 
 import org.apache.avro.io.EncoderFactory
-import org.apache.hadoop.hbase.client.Admin
-import org.apache.hadoop.hbase.client.Connection
-import org.apache.hadoop.hbase.client.ConnectionFactory
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
 import org.apache.hadoop.hbase.io.compress.Compression
-import org.apache.hadoop.hbase.client.Scan
 import org.apache.avro.io.DecoderFactory
 import org.apache.avro.io.DatumReader
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.client.HTable
 
 import org.bdgenomics.formats.avro.Variant
 import org.bdgenomics.formats.avro.Genotype
 import org.bdgenomics.adam.models.{ SequenceDictionary, VariantContext }
 import org.bdgenomics.formats.avro.{ Contig, RecordGroupMetadata, Sample }
-import org.apache.hadoop.hbase.client.Get
 
 import scala.collection.mutable.ListBuffer
 import sys.process._
@@ -338,6 +331,25 @@ object HBaseFunctions {
     })
 
     result
+  }
+
+  def createHBaseGenotypeTable(hbaseTableName: String): Unit = {
+    val conf = HBaseConfiguration.create()
+
+    val connection = ConnectionFactory.createConnection(conf)
+
+    val admin = connection.getAdmin
+
+    val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
+    tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
+    admin.createTable(tableDescriptor)
+
+    val hbaseTableName_meta = hbaseTableName + "_meta"
+
+    val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
+    tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
+    admin.createTable(tableDescriptor_meta)
+
   }
 
 }
