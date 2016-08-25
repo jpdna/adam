@@ -11,7 +11,7 @@ import org.bdgenomics.adam.rdd.ADAMContext
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projection }
 import org.bdgenomics.adam.rdd
-import org.bdgenomics.adam.rdd.variation.{GenotypeRDD, VariantContextRDD}
+import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
 import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
@@ -131,6 +131,7 @@ object HBaseFunctions {
     result
   }
 
+  //deprecated
   def saveHBaseSequenceDictMetadataSingleSample(vcRdd: VariantContextRDD,
                                                 hbaseTableName: String): Unit = {
 
@@ -160,8 +161,68 @@ object HBaseFunctions {
 
   }
 
+  /*
+  def saveVariantContextRDDSequenceDictionaryToHBase(vcRdd: VariantContextRDD,
+                                                     hbaseTableName: String,
+                                                     sequenceDictionaryId: String): Unit = {
+
+    val conf = HBaseConfiguration.create()
+    val connection = ConnectionFactory.createConnection(conf)
+    val table = connection.getTable(TableName.valueOf(hbaseTableName))
+
+    //val sampleId = vcRdd.samples(0).getSampleId
+    val contigs = vcRdd.sequences.toAvro
+
+    val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+    contigs.foreach((x) => {
+
+      val contigDatumWriter: DatumWriter[Contig] =
+        new SpecificDatumWriter[Contig](scala.reflect.classTag[Contig].runtimeClass.asInstanceOf[Class[Contig]])
+      contigDatumWriter.write(x, encoder)
+
+    })
+
+    encoder.flush()
+    baos.flush()
+
+    val put = new Put(Bytes.toBytes(sequenceDictionaryId))
+    put.addColumn(Bytes.toBytes("meta"), Bytes.toBytes("contigdata"), baos.toByteArray)
+    table.put(put)
+
+  }
+  */
+
+  def saveSequenceDictionaryToHBase(hbaseTableName: String, sequences: SequenceDictionary, sequenceDictionaryId: String): Unit = {
+
+    val conf = HBaseConfiguration.create()
+    val connection = ConnectionFactory.createConnection(conf)
+    val table: Table = connection.getTable(TableName.valueOf(hbaseTableName))
+
+    //val sampleId = vcRdd.samples(0).getSampleId
+    val contigs = sequences.toAvro
+
+    val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+    contigs.foreach((x) => {
+
+    val contigDatumWriter: DatumWriter[Contig] =
+    new SpecificDatumWriter[Contig](scala.reflect.classTag[Contig].runtimeClass.asInstanceOf[Class[Contig]])
+    contigDatumWriter.write(x, encoder)
+
+    })
+
+    encoder.flush()
+    baos.flush()
+
+    val put = new Put(Bytes.toBytes(sequenceDictionaryId))
+    put.addColumn(Bytes.toBytes("meta"), Bytes.toBytes("contigdata"), baos.toByteArray)
+    table.put(put)
+
+  }
+
   def loadSequenceDictionaryFromHBase(hbaseTableName: String,
-                                          sequenceDictionaryId: String): SequenceDictionary = {
+                                      sequenceDictionaryId: String): SequenceDictionary = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -184,14 +245,14 @@ object HBaseFunctions {
 
   }
 
-  def saveSampleMetadataToHBase(vcRdd: VariantContextRDD,
-                                hbaseTableName: String): Unit = {
+  def saveSampleMetadataToHBase(hbaseTableName: String,
+                                samples: Seq[Sample]): Unit = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
     val table = connection.getTable(TableName.valueOf(hbaseTableName))
 
-    vcRdd.samples.foreach((x) => {
+    samples.foreach((x) => {
       val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
       val encoder = EncoderFactory.get().binaryEncoder(baos, null)
 
@@ -211,41 +272,54 @@ object HBaseFunctions {
   }
 
   def loadSampleMetadataFromHBase(hbaseTableName: String,
-                                    sampleId: String): Seq[Sample] = {
+                                  sampleIds: List[String]): Seq[Sample] = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
     val table = connection.getTable(TableName.valueOf(hbaseTableName))
-    val myGet = new Get(Bytes.toBytes(sampleId))
-    val result = table.get(myGet)
-    val dataBytes = result.getValue(Bytes.toBytes("meta"), Bytes.toBytes("sampledata"))
 
-    val sampleDatumReader: DatumReader[Sample] =
-      new SpecificDatumReader[Sample](scala.reflect.classTag[Sample]
-        .runtimeClass
-        .asInstanceOf[Class[Sample]])
-
-    val decoder = DecoderFactory.get().binaryDecoder(dataBytes, null)
     var resultList = new ListBuffer[Sample]
-    while (!decoder.isEnd) { resultList += sampleDatumReader.read(null, decoder) }
+
+    sampleIds.foreach( (sampleId) => {
+      val myGet = new Get(Bytes.toBytes(sampleId))
+      val result = table.get(myGet)
+      val dataBytes = result.getValue(Bytes.toBytes("meta"), Bytes.toBytes("sampledata"))
+
+      val sampleDatumReader: DatumReader[Sample] =
+        new SpecificDatumReader[Sample](scala.reflect.classTag[Sample]
+          .runtimeClass
+          .asInstanceOf[Class[Sample]])
+
+      val decoder = DecoderFactory.get().binaryDecoder(dataBytes, null)
+
+      while (!decoder.isEnd) {
+        resultList += sampleDatumReader.read(null, decoder)
+      }
+
+    })
 
     resultList.toSeq
 
   }
 
-  //
+
   // consider implementing  a saveGenotypeRDDToHBase
 
-  def saveVariantContextRDDToHBase(sc: SparkContext,
-                           vcRdd: VariantContextRDD,
-                           hbaseTableName: String): Unit = {
+  def OLDsaveVariantContextRDDToHBase(sc: SparkContext,
+                                   vcRdd: VariantContextRDD,
+                                   hbaseTableName: String,
+                                   sequenceDictionaryId: String): Unit = {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
+
+    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
+    saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+
     val data = vcRdd.rdd
 
-    // Is this group by necessary? isn't Variant Contxt alrady grouped by unique Variant
+    // Is this group by necessary? isn't Variant Contxt already grouped by unique Variant
     val dataGroupedByRowKey = data.groupBy(c => c.variant.variant.getContigName + "_"
       + c.variant.variant.getStart.toString.replace(' ', '0')
       + "_" + c.variant.variant.getAlternateAllele)
@@ -294,9 +368,121 @@ object HBaseFunctions {
   }
 
 
+
+
+  def saveVariantContextRDDToHBase(sc: SparkContext,
+                                      vcRdd: VariantContextRDD,
+                                      hbaseTableName: String,
+                                      sequenceDictionaryId: String): Unit = {
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+
+    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
+    saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+
+    val data: RDD[VariantContext] = vcRdd.rdd
+
+
+    // Is this group by necessary? isn't Variant Contxt already grouped by unique Variant
+    val dataGroupedByRowKey = data.groupBy(c => c.variant.variant.getContigName + "_"
+      + c.variant.variant.getStart.toString.replace(' ', '0')
+      + "_" + c.variant.variant.getAlternateAllele)
+
+    val variantContextHBaseRows: RDD[(Array[Byte], Array[Byte], Array[Byte], Array[Byte])] =
+      dataGroupedByRowKey.mapPartitions((iterator) => {
+        val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+        val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+
+        val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
+          scala.reflect.classTag[Genotype]
+            .runtimeClass
+            .asInstanceOf[Class[Genotype]])
+
+        iterator.map((putRecord) => {
+          genotypebaos.reset()
+          val myRowKey = Bytes.toBytes(putRecord._1)
+
+          // item.genotypes.toList.head is selected because this function assumes that vcRdd contains only
+          // genotypes from a single sample genotypeAtCurrRowKey contains all the Genotype objects for this
+          // sample which have the same rowKey (start position and allele)
+          // This is necessary because some VCF files contain multiple rows with same start position and alt allele
+
+
+
+          val genotypeAtCurrRowKey: Iterable[Genotype] = putRecord._2.map(item => item.genotypes.toList.head)
+
+
+
+
+          val sampleId = genotypeAtCurrRowKey.head.getSampleId
+
+          //packs multiple genotypes with the the same rowKey into a single HBase value
+          genotypeAtCurrRowKey.foreach(genotypeDatumWriter.write(_, genotypeEncoder))
+
+          genotypeEncoder.flush()
+          genotypebaos.flush()
+
+          (myRowKey, Bytes.toBytes("g"), Bytes.toBytes(sampleId), genotypebaos.toByteArray)
+
+        })
+      })
+
+
+    val genodata = vcRdd.rdd.mapPartitions( (iterator) => {
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
+        scala.reflect.classTag[Genotype]
+          .runtimeClass
+          .asInstanceOf[Class[Genotype]])
+
+      val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" +  String.format("%10s", putRecord.variant.variant.getStart.toString.replace(' ','0')) + "_" +
+                        putRecord.variant.variant.getAlternateAllele)
+
+       val genotypes: List[(String,Array[Byte])] = putRecord.genotypes.map( (geno) => {
+                         genotypebaos.reset()
+                         genotypeDatumWriter.write(geno,genotypeEncoder)
+                         genotypeEncoder.flush()
+                         genotypebaos.flush()
+                        (geno.getSampleId, genotypebaos.toByteArray)
+       }).toList
+
+        (myRowKey, genotypes)
+
+      })
+
+      //return value of the map paritions
+      genotypesForHbase
+
+
+    })
+
+    genodata.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1)
+
+        putRecord._2.foreach( (x) => {
+                                 val sampleId: String = x._1
+                                 val genoBytes: Array[Byte] = x._2
+                                 put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes) })
+
+               
+        put
+      })
+
+
+
+  }
+
+
   def loadGenotypesFromHBase(sc: SparkContext,
-                         hbaseTableName: String,
-                         sampleIDs: List[String]): RDD[Genotype] = {
+                             hbaseTableName: String,
+                             sampleIDs: List[String]): RDD[Genotype] = {
 
     val scan = new Scan()
     scan.setCaching(100)
@@ -358,16 +544,17 @@ object HBaseFunctions {
 
   }
 
-  def loadGenotypeRddFromHBase(sc: SparkContext,
-                                 hbaseTableName: String,
-                                 sampleId: String,
-                                 sequenceDictionaryId: String
-                                ): GenotypeRDD = {
-    val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
-    val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleId)
-    val genotypes = loadGenotypesFromHBase(sc, hbaseTableName, List(sampleId))
 
-    GenotypeRDD(genotypes,sequenceDictionary, sampleMetadata)
+  def loadGenotypeRddFromHBase(sc: SparkContext,
+                               hbaseTableName: String,
+                               sampleIds: List[String],
+                               sequenceDictionaryId: String): GenotypeRDD = {
+
+    val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
+    val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
+    val genotypes = loadGenotypesFromHBase(sc, hbaseTableName, sampleIds)
+
+    GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
 
   }
 
