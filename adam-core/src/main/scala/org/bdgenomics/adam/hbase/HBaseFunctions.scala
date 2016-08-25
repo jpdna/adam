@@ -11,7 +11,7 @@ import org.bdgenomics.adam.rdd.ADAMContext
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projection }
 import org.bdgenomics.adam.rdd
-import org.bdgenomics.adam.rdd.variation.VariantContextRDD
+import org.bdgenomics.adam.rdd.variation.{GenotypeRDD, VariantContextRDD}
 import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
@@ -160,14 +160,14 @@ object HBaseFunctions {
 
   }
 
-  def loadHBaseSequenceDictMetadataSingle(hbaseTableName: String,
-                                          sampleId: String): SequenceDictionary = {
+  def loadSequenceDictionaryFromHBase(hbaseTableName: String,
+                                          sequenceDictionaryId: String): SequenceDictionary = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
     val table = connection.getTable(TableName.valueOf(hbaseTableName))
 
-    val myGet = new Get(Bytes.toBytes(sampleId))
+    val myGet = new Get(Bytes.toBytes(sequenceDictionaryId))
     val result = table.get(myGet)
     val dataBytes = result.getValue(Bytes.toBytes("meta"), Bytes.toBytes("contigdata"))
 
@@ -184,8 +184,8 @@ object HBaseFunctions {
 
   }
 
-  def saveHBaseSampleMetadataSingleSample(vcRdd: VariantContextRDD,
-                                          hbaseTableName: String): Unit = {
+  def saveSampleMetadataToHBase(vcRdd: VariantContextRDD,
+                                hbaseTableName: String): Unit = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -210,7 +210,7 @@ object HBaseFunctions {
     })
   }
 
-  def loadHBaseSampleMetadataSingle(hbaseTableName: String,
+  def loadSampleMetadataFromHBase(hbaseTableName: String,
                                     sampleId: String): Seq[Sample] = {
 
     val conf = HBaseConfiguration.create()
@@ -233,14 +233,19 @@ object HBaseFunctions {
 
   }
 
-  def saveHBaseGenotypesSingleSample(sc: SparkContext,
-                                     vcRdd: VariantContextRDD,
-                                     hbaseTableName: String): Unit = {
+  //
+  // consider implementing  a saveGenotypeRDDToHBase
+
+  def saveVariantContextRDDToHBase(sc: SparkContext,
+                           vcRdd: VariantContextRDD,
+                           hbaseTableName: String): Unit = {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
     val data = vcRdd.rdd
+
+    // Is this group by necessary? isn't Variant Contxt alrady grouped by unique Variant
     val dataGroupedByRowKey = data.groupBy(c => c.variant.variant.getContigName + "_"
       + c.variant.variant.getStart.toString.replace(' ', '0')
       + "_" + c.variant.variant.getAlternateAllele)
@@ -288,7 +293,8 @@ object HBaseFunctions {
 
   }
 
-  def loadHBaseGenotypes(sc: SparkContext,
+
+  def loadGenotypesFromHBase(sc: SparkContext,
                          hbaseTableName: String,
                          sampleIDs: List[String]): RDD[Genotype] = {
 
@@ -349,6 +355,19 @@ object HBaseFunctions {
     val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
     tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
     admin.createTable(tableDescriptor_meta)
+
+  }
+
+  def loadGenotypeRddFromHBase(sc: SparkContext,
+                                 hbaseTableName: String,
+                                 sampleId: String,
+                                 sequenceDictionaryId: String
+                                ): GenotypeRDD = {
+    val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
+    val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleId)
+    val genotypes = loadGenotypesFromHBase(sc, hbaseTableName, List(sampleId))
+
+    GenotypeRDD(genotypes,sequenceDictionary, sampleMetadata)
 
   }
 
