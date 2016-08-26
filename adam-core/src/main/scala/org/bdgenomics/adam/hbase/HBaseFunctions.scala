@@ -430,7 +430,8 @@ object HBaseFunctions {
 
   def loadGenotypesFromHBase(sc: SparkContext,
                              hbaseTableName: String,
-                             sampleIds: List[String]): RDD[Genotype] = {
+                             sampleIds: List[String],
+                             numPartitions: Int = 0): RDD[Genotype] = {
 
     val scan = new Scan()
     scan.setCaching(100)
@@ -445,33 +446,26 @@ object HBaseFunctions {
 
     val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
-    val result: RDD[Genotype] = resultHBaseRDD.mapPartitions((iterator) => {
+    val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
+    else resultHBaseRDD
+
+    val result: RDD[Genotype] = resultHBaseRDDrepar.mapPartitions((iterator) => {
+
+      val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
+        .runtimeClass
+        .asInstanceOf[Class[Genotype]])
+
       iterator.flatMap((curr) => {
-
         var resultList = new ListBuffer[Genotype]
-
-        //while (curr._2.advance()) {
         sampleIds.foreach((sample) => {
           val myVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
-
-          val genotypeDatumReader: DatumReader[Genotype] =
-            new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
-              .runtimeClass
-              .asInstanceOf[Class[Genotype]])
-
           val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal(0)), null)
-
-          while (!decoder.isEnd) {
-            resultList += genotypeDatumReader.read(null, decoder)
-          }
-
+          while (!decoder.isEnd) { resultList += genotypeDatumReader.read(null, decoder) }
         })
-        //}
         resultList
-
       })
-    })
 
+    })
     result
   }
 
@@ -497,11 +491,12 @@ object HBaseFunctions {
   def loadGenotypeRddFromHBase(sc: SparkContext,
                                hbaseTableName: String,
                                sampleIds: List[String],
-                               sequenceDictionaryId: String): GenotypeRDD = {
+                               sequenceDictionaryId: String,
+                               numPartitions: Int = 0): GenotypeRDD = {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
-    val genotypes = loadGenotypesFromHBase(sc, hbaseTableName, sampleIds)
+    val genotypes = loadGenotypesFromHBase(sc, hbaseTableName, sampleIds, numPartitions)
 
     GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
 
