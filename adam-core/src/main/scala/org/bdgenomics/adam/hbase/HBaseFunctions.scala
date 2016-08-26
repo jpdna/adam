@@ -171,11 +171,16 @@ object HBaseFunctions {
   def loadRDDofGenotypeFromHBase(sc: SparkContext,
                                  hbaseTableName: String,
                                  sampleIds: List[String],
+                                 start: String = null,
+                                 stop: String = null,
                                  numPartitions: Int = 0): RDD[Genotype] = {
 
     val scan = new Scan()
     scan.setCaching(100)
     scan.setMaxVersions(1)
+
+    if (!start.isEmpty) scan.setStartRow(Bytes.toBytes(start))
+    if (!stop.isEmpty) scan.setStopRow(Bytes.toBytes(stop))
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -297,11 +302,13 @@ object HBaseFunctions {
                                hbaseTableName: String,
                                sampleIds: List[String],
                                sequenceDictionaryId: String,
+                               start: String = null,
+                               stop: String = null,
                                numPartitions: Int = 0): GenotypeRDD = {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
-    val genotypes = loadRDDofGenotypeFromHBase(sc, hbaseTableName, sampleIds, numPartitions)
+    val genotypes = loadRDDofGenotypeFromHBase(sc, hbaseTableName, sampleIds, start, stop, numPartitions)
 
     GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
 
