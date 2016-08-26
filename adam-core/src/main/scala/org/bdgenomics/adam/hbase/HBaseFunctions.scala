@@ -216,8 +216,26 @@ object HBaseFunctions {
   ///////////////////////////////////
   ////  Public API
 
+  def createHBaseGenotypeTable(hbaseTableName: String): Unit = {
+    val conf = HBaseConfiguration.create()
 
-  // public API
+    val connection = ConnectionFactory.createConnection(conf)
+
+    val admin = connection.getAdmin
+
+    val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
+    tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
+    admin.createTable(tableDescriptor)
+
+    val hbaseTableName_meta = hbaseTableName + "_meta"
+
+    val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
+    tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
+    admin.createTable(tableDescriptor_meta)
+  }
+
+
+
   def saveVariantContextRDDToHBase(sc: SparkContext,
                                    vcRdd: VariantContextRDD,
                                    hbaseTableName: String,
@@ -270,35 +288,11 @@ object HBaseFunctions {
           val genoBytes: Array[Byte] = x._2
           put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes)
         })
-
         put
       })
-
   }
 
 
-
-  // public API
-  def createHBaseGenotypeTable(hbaseTableName: String): Unit = {
-    val conf = HBaseConfiguration.create()
-
-    val connection = ConnectionFactory.createConnection(conf)
-
-    val admin = connection.getAdmin
-
-    val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
-    tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
-    admin.createTable(tableDescriptor)
-
-    val hbaseTableName_meta = hbaseTableName + "_meta"
-
-    val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
-    tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
-    admin.createTable(tableDescriptor_meta)
-
-  }
-
-  //public API
   def loadGenotypesFromHBaseToGenotypeRDD(sc: SparkContext,
                                hbaseTableName: String,
                                sampleIds: List[String],
@@ -315,7 +309,7 @@ object HBaseFunctions {
 
 
 
-  
+
 
 
 
