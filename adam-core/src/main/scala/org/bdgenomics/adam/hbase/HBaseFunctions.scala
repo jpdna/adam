@@ -176,8 +176,8 @@ object HBaseFunctions {
     scan.setCaching(100)
     scan.setMaxVersions(1)
 
-    if (!start.isEmpty) scan.setStartRow(Bytes.toBytes(start))
-    if (!stop.isEmpty) scan.setStopRow(Bytes.toBytes(stop))
+    if (start != null) scan.setStartRow(Bytes.toBytes(start))
+    if (stop != null) scan.setStopRow(Bytes.toBytes(stop))
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -245,7 +245,11 @@ object HBaseFunctions {
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
-    if(saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+    ///
+    /// Need an exception is SequienceDicotionId is null an dsaveSequencDictionary is true
+    //
+
+    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
     val data: RDD[VariantContext] = vcRdd.rdd
 
@@ -260,7 +264,7 @@ object HBaseFunctions {
 
       val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
         val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
-          putRecord.variant.variant.getAlternateAllele + "_" + putRecord.variant.variant.getEnd)
+          putRecord.variant.variant.getReferenceAllele + "_" + putRecord.variant.variant.getAlternateAllele + "_" + putRecord.variant.variant.getEnd)
 
         val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
           genotypebaos.reset()
