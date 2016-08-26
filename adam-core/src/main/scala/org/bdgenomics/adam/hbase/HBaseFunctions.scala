@@ -46,10 +46,8 @@ import sys.process._
 
 object HBaseFunctions {
 
-
   /////////////////////////////////////////////////
   /// Private helper functions
-
 
   // private to HBaseFunctions
   def saveSequenceDictionaryToHBase(hbaseTableName: String,
@@ -166,7 +164,6 @@ object HBaseFunctions {
 
   }
 
-
   // private to HBaseFunctions
   def loadRDDofGenotypeFromHBase(sc: SparkContext,
                                  hbaseTableName: String,
@@ -216,8 +213,6 @@ object HBaseFunctions {
 
   //////////////// End of private helper functions
 
-
-
   ///////////////////////////////////
   ////  Public API
 
@@ -239,18 +234,18 @@ object HBaseFunctions {
     admin.createTable(tableDescriptor_meta)
   }
 
-
-
   def saveVariantContextRDDToHBase(sc: SparkContext,
                                    vcRdd: VariantContextRDD,
                                    hbaseTableName: String,
-                                   sequenceDictionaryId: String): Unit = {
+                                   sequenceDictionaryId: String = null,
+                                   saveSequenceDictionary: Boolean = true): Unit = {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
-    saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+
+    if(saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
     val data: RDD[VariantContext] = vcRdd.rdd
 
@@ -297,14 +292,13 @@ object HBaseFunctions {
       })
   }
 
-
   def loadGenotypesFromHBaseToGenotypeRDD(sc: SparkContext,
-                               hbaseTableName: String,
-                               sampleIds: List[String],
-                               sequenceDictionaryId: String,
-                               start: String = null,
-                               stop: String = null,
-                               numPartitions: Int = 0): GenotypeRDD = {
+                                          hbaseTableName: String,
+                                          sampleIds: List[String],
+                                          sequenceDictionaryId: String,
+                                          start: String = null,
+                                          stop: String = null,
+                                          numPartitions: Int = 0): GenotypeRDD = {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
@@ -313,13 +307,6 @@ object HBaseFunctions {
     GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
 
   }
-
-
-
-
-
-
-
 
   //////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////
