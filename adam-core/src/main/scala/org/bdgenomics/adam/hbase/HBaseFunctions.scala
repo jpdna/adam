@@ -14,6 +14,7 @@ import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projection }
 import org.bdgenomics.adam.rdd
 import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
+import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
@@ -34,7 +35,7 @@ import org.apache.hadoop.fs.Path
 
 import org.bdgenomics.formats.avro.Variant
 import org.bdgenomics.formats.avro.Genotype
-import org.bdgenomics.adam.models.{ SequenceDictionary, VariantContext }
+import org.bdgenomics.adam.models.{ReferencePosition, SequenceDictionary, VariantContext}
 import org.bdgenomics.formats.avro.{ Contig, RecordGroupMetadata, Sample }
 
 import scala.collection.mutable.ListBuffer
@@ -211,6 +212,69 @@ object HBaseFunctions {
     result
   }
 
+
+  def loadRDDofVariantContextFromHBase( sc: SparkContext,
+                               hbaseTableName: String,
+                               sampleIds: List[String],
+                               start: String = null,
+                               stop: String = null,
+                               numPartitions: Int = 0): RDD[VariantContext] = {
+
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    if (start != null) scan.setStartRow(Bytes.toBytes(start))
+    if (stop != null) scan.setStopRow(Bytes.toBytes(stop))
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    sampleIds.foreach(sampleId => {
+      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
+    })
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
+    else resultHBaseRDD
+
+    val result: RDD[VariantContext] = resultHBaseRDDrepar.mapPartitions((iterator) => {
+
+
+
+      val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
+        .runtimeClass
+        .asInstanceOf[Class[Genotype]])
+
+      iterator.map(   (curr) => {
+        var resultList = new ListBuffer[Genotype]
+        sampleIds.foreach((sample) => {
+          val myVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
+          val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal(0)), null)
+          while (!decoder.isEnd) { resultList += genotypeDatumReader.read(null, decoder) }
+        })
+
+        resultList
+        val x = resultList.toList
+
+        val firstGenotype: Genotype = x(0)
+        val currVar: RichVariant = RichVariant.genotypeToRichVariant(firstGenotype)
+        val currRefPos = ReferencePosition(currVar.variant.getContigName, currVar.variant.getStart)
+
+        val currVariantContext: VariantContext = new VariantContext(currRefPos, currVar, x)
+        currVariantContext
+      })
+
+
+
+    })
+
+
+
+    result
+  }
+
   //////////////// End of private helper functions
 
   ///////////////////////////////////
@@ -311,6 +375,29 @@ object HBaseFunctions {
     GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
 
   }
+
+  def loadGenotypesFromHBaseToVariantContextRDD(sc: SparkContext,
+                                          hbaseTableName: String,
+                                          sampleIds: List[String],
+                                          sequenceDictionaryId: String,
+                                          start: String = null,
+                                          stop: String = null,
+                                          numPartitions: Int = 0): VariantContextRDD = {
+
+    val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
+    val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
+    val genotypes = loadRDDofVariantContextFromHBase(sc, hbaseTableName, sampleIds, start, stop, numPartitions)
+
+    VariantContextRDD(genotypes, sequenceDictionary, sampleMetadata)
+
+  }
+
+
+
+
+
+
+
 
   //////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////
