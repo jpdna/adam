@@ -15,7 +15,7 @@ import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projectio
 import org.bdgenomics.adam.rdd
 import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
 import org.bdgenomics.adam.rich.RichVariant
-import org.bdgenomics.formats.avro.AlignmentRecord
+import org.bdgenomics.formats.avro._
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
@@ -32,11 +32,7 @@ import org.apache.avro.io.DatumReader
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.Path
-
-import org.bdgenomics.formats.avro.Variant
-import org.bdgenomics.formats.avro.Genotype
 import org.bdgenomics.adam.models.{ ReferenceRegion, ReferencePosition, SequenceDictionary, VariantContext }
-import org.bdgenomics.formats.avro.{ Contig, RecordGroupMetadata, Sample }
 
 import scala.collection.mutable.ListBuffer
 import sys.process._
@@ -335,6 +331,82 @@ object HBaseFunctions {
           genotypeEncoder.flush()
           genotypebaos.flush()
           (geno.getSampleId, genotypebaos.toByteArray)
+        }).toList
+
+        (myRowKey, genotypes)
+
+      })
+
+      genotypesForHbase
+
+    })
+
+    genodata.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1)
+
+        putRecord._2.foreach((x) => {
+          val sampleId: String = x._1
+          val genoBytes: Array[Byte] = x._2
+          put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes)
+        })
+        put
+      })
+  }
+
+  def saveVariantContextRDDToHBaseEncoding1(sc: SparkContext,
+                                            vcRdd: VariantContextRDD,
+                                            hbaseTableName: String,
+                                            sequenceDictionaryId: String = null,
+                                            saveSequenceDictionary: Boolean = true): Unit = {
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
+
+    ///
+    /// Need an exception if SequenceDictionaryId is null an dsaveSequencDictionary is true
+    //
+
+    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+
+    val data: RDD[VariantContext] = vcRdd.rdd
+
+    val genodata = vcRdd.rdd.mapPartitions((iterator) => {
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
+        scala.reflect.classTag[Genotype]
+          .runtimeClass
+          .asInstanceOf[Class[Genotype]])
+
+      val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
+          putRecord.variant.variant.getReferenceAllele + "_" + putRecord.variant.variant.getAlternateAllele + "_" + putRecord.variant.variant.getEnd)
+
+        val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
+          genotypebaos.reset()
+
+          val a1 = geno.alleles(0).ordinal()
+          val a2 = geno.alleles(1).ordinal()
+
+          genotypeEncoder.writeInt(a1)
+          genotypeEncoder.writeInt(a2)
+
+          var phasesetid = geno.getPhaseSetId
+          if (phasesetid == null) { phasesetid = 0 }
+
+          genotypeEncoder.writeInt(phasesetid)
+          genotypeEncoder.writeBoolean(geno.getIsPhased)
+
+          genotypeEncoder.flush()
+          genotypebaos.flush()
+
+          (geno.getSampleId, genotypebaos.toByteArray)
+          //(geno.getSampleId, Bytes.toBytes("Dude"))
         }).toList
 
         (myRowKey, genotypes)
