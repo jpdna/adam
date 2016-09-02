@@ -28,8 +28,9 @@ import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
 import org.apache.hadoop.hbase.io.compress.Compression
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{ FSDataInputStream, FileSystem, Path }
 import org.bdgenomics.adam.models.{ ReferenceRegion, ReferencePosition, SequenceDictionary, VariantContext }
+import scala.io.Source
 
 import scala.collection.mutable.ListBuffer
 import sys.process._
@@ -230,7 +231,9 @@ object HBaseFunctions {
     val startPos: Long = myRowKey(1).toLong
     val refAllele = myRowKey(2)
     val altAllele = myRowKey(3)
-    val endPos: Long = myRowKey(4).toLong
+    val alleleLength: Long = myRowKey(4).toLong
+
+    val endPos = startPos + alleleLength
 
     myGeno.variant = new Variant()
     myGeno.variant.setReferenceAllele(refAllele)
@@ -439,7 +442,7 @@ object HBaseFunctions {
   ///////////////////////////////////
   ////  Public API
 
-  def createHBaseGenotypeTable(hbaseTableName: String): Unit = {
+  def createHBaseGenotypeTable(hbaseTableName: String, splitsFileName: String): Unit = {
     val conf = HBaseConfiguration.create()
 
     val connection = ConnectionFactory.createConnection(conf)
@@ -447,14 +450,32 @@ object HBaseFunctions {
     val admin = connection.getAdmin
 
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
-    tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ).setMaxVersions(1))
-    admin.createTable(tableDescriptor)
+    tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ)
+                                                       .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+                                                       .setMaxVersions(1))
+
+    val splits: Array[Array[Byte]] = Source.fromFile(splitsFileName).getLines.toArray
+                                           .map(x => x.split(" "))
+                                           .map(g => Bytes.toBytes(g(0) + "_"
+                                                            + String.format("%10s", g(1).toString).replace(' ', '0')))
+
+    admin.createTable(tableDescriptor, splits)
+    //admin.create
 
     val hbaseTableName_meta = hbaseTableName + "_meta"
 
     val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
-    tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes()).setCompressionType(Algorithm.GZ).setDataBlockEncoding(DataBlockEncoding.FAST_DIFF) setMaxVersions (1))
+    tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes())
+                                                               .setCompressionType(Algorithm.GZ)
+                                                               .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+                                                               .setMaxVersions(1))
     admin.createTable(tableDescriptor_meta)
+  }
+
+  def testRead2(): Unit = {
+    val listOfLines = Source.fromFile("/jp5t/1000G/phase3_VCF/20130502/make_splits/out1.chr22").getLines.toArray.map(x => x.split(" ")).map(g => Bytes.toBytes(g(0) + "_" + String.format("%10s", g(1).toString).replace(' ', '0')))
+    println(listOfLines)
+
   }
 
   def saveVariantContextRDDToHBase(sc: SparkContext,
@@ -464,6 +485,7 @@ object HBaseFunctions {
                                    saveSequenceDictionary: Boolean = true): Unit = {
 
     val conf = HBaseConfiguration.create()
+
     val hbaseContext = new HBaseContext(sc, conf)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
