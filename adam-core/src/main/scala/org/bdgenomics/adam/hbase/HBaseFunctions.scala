@@ -451,13 +451,13 @@ object HBaseFunctions {
 
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
     tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ)
-                                                       .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
-                                                       .setMaxVersions(1))
+      .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+      .setMaxVersions(1))
 
     val splits: Array[Array[Byte]] = Source.fromFile(splitsFileName).getLines.toArray
-                                           .map(x => x.split(" "))
-                                           .map(g => Bytes.toBytes(g(0) + "_"
-                                                            + String.format("%10s", g(1).toString).replace(' ', '0')))
+      .map(x => x.split(" "))
+      .map(g => Bytes.toBytes(g(0) + "_"
+        + String.format("%10s", g(1).toString).replace(' ', '0')))
 
     admin.createTable(tableDescriptor, splits)
     //admin.create
@@ -466,16 +466,10 @@ object HBaseFunctions {
 
     val tableDescriptor_meta = new HTableDescriptor(TableName.valueOf(hbaseTableName_meta))
     tableDescriptor_meta.addFamily(new HColumnDescriptor("meta".getBytes())
-                                                               .setCompressionType(Algorithm.GZ)
-                                                               .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
-                                                               .setMaxVersions(1))
+      .setCompressionType(Algorithm.GZ)
+      .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+      .setMaxVersions(1))
     admin.createTable(tableDescriptor_meta)
-  }
-
-  def testRead2(): Unit = {
-    val listOfLines = Source.fromFile("/jp5t/1000G/phase3_VCF/20130502/make_splits/out1.chr22").getLines.toArray.map(x => x.split(" ")).map(g => Bytes.toBytes(g(0) + "_" + String.format("%10s", g(1).toString).replace(' ', '0')))
-    println(listOfLines)
-
   }
 
   def saveVariantContextRDDToHBase(sc: SparkContext,
@@ -542,82 +536,6 @@ object HBaseFunctions {
   }
 
   def saveVariantContextRDDToHBaseEncoding1(sc: SparkContext,
-                                            vcRdd: VariantContextRDD,
-                                            hbaseTableName: String,
-                                            sequenceDictionaryId: String = null,
-                                            saveSequenceDictionary: Boolean = true): Unit = {
-
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-
-    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
-
-    ///
-    /// Need an exception if SequenceDictionaryId is null an dsaveSequencDictionary is true
-    //
-
-    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
-
-    val data: RDD[VariantContext] = vcRdd.rdd
-
-    val genodata = vcRdd.rdd.mapPartitions((iterator) => {
-      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
-      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
-
-      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
-        scala.reflect.classTag[Genotype]
-          .runtimeClass
-          .asInstanceOf[Class[Genotype]])
-
-      val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
-        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
-          putRecord.variant.variant.getReferenceAllele + "_" + putRecord.variant.variant.getAlternateAllele + "_" + putRecord.variant.variant.getEnd)
-
-        val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
-          genotypebaos.reset()
-
-          val a1 = geno.alleles(0).ordinal()
-          val a2 = geno.alleles(1).ordinal()
-
-          genotypeEncoder.writeInt(a1)
-          genotypeEncoder.writeInt(a2)
-
-          var phasesetid = geno.getPhaseSetId
-          if (phasesetid == null) { phasesetid = 0 }
-
-          genotypeEncoder.writeInt(phasesetid)
-          genotypeEncoder.writeBoolean(geno.getIsPhased)
-
-          genotypeEncoder.flush()
-          genotypebaos.flush()
-
-          (geno.getSampleId, genotypebaos.toByteArray)
-          //(geno.getSampleId, Bytes.toBytes("Dude"))
-        }).toList
-
-        (myRowKey, genotypes)
-
-      })
-
-      genotypesForHbase
-
-    })
-
-    genodata.hbaseBulkPut(hbaseContext,
-      TableName.valueOf(hbaseTableName),
-      (putRecord) => {
-        val put = new Put(putRecord._1)
-
-        putRecord._2.foreach((x) => {
-          val sampleId: String = x._1
-          val genoBytes: Array[Byte] = x._2
-          put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes)
-        })
-        put
-      })
-  }
-
-  def saveVariantContextRDDToHBaseEncoding2(sc: SparkContext,
                                             vcRdd: VariantContextRDD,
                                             hbaseTableName: String,
                                             sequenceDictionaryId: String = null,
