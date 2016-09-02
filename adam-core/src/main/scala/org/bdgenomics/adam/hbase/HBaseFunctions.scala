@@ -21,14 +21,10 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
 import org.apache.avro.specific.SpecificDatumWriter
 import org.apache.avro.file.DataFileWriter
-import org.apache.avro.io.DatumWriter
+import org.apache.avro.io._
 import java.io.ByteArrayOutputStream
-
-import org.apache.avro.io.EncoderFactory
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
 import org.apache.hadoop.hbase.io.compress.Compression
-import org.apache.avro.io.DecoderFactory
-import org.apache.avro.io.DatumReader
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.Path
@@ -220,6 +216,42 @@ object HBaseFunctions {
     }
   }
 
+  def encoder1BytesToGenotype(decoder: BinaryDecoder, myRowKey: Array[String], sampleid: String): Genotype = {
+
+    val myGeno = new Genotype()
+
+    val a1 = decoder.readInt()
+    val a2 = decoder.readInt()
+    val phaseSetId = decoder.readInt()
+    val isPhased = decoder.readBoolean()
+
+    val contigName = myRowKey(0)
+    val startPos: Long = myRowKey(1).toLong
+    val refAllele = myRowKey(2)
+    val altAllele = myRowKey(3)
+    val endPos: Long = myRowKey(4).toLong
+
+    myGeno.variant = new Variant()
+    myGeno.variant.setReferenceAllele(refAllele)
+    myGeno.variant.setAlternateAllele(altAllele)
+
+    val allele1: GenotypeAllele = intToGenotypeAllele(a1)
+    val allele2: GenotypeAllele = intToGenotypeAllele(a2)
+
+    myGeno.setAlleles(List(allele1, allele2))
+    myGeno.setGenotypeLikelihoods(List())
+    myGeno.setNonReferenceLikelihoods(List())
+    myGeno.setStrandBiasComponents(List())
+    myGeno.setContigName(contigName)
+    myGeno.setSampleId(sampleid)
+    myGeno.setPhaseSetId(phaseSetId)
+    myGeno.setIsPhased(isPhased)
+    myGeno.setStart(startPos)
+    myGeno.setEnd(endPos)
+
+    myGeno
+  }
+
   def loadRDDofGenotypeFromHBaseEncoder1(sc: SparkContext,
                                          hbaseTableName: String,
                                          sampleIds: List[String],
@@ -251,10 +283,6 @@ object HBaseFunctions {
 
     val result: RDD[Genotype] = resultHBaseRDDrepar.mapPartitions((iterator) => {
 
-      // val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
-      //  .runtimeClass
-      //  .asInstanceOf[Class[Genotype]])
-
       val blank: Array[Byte] = Bytes.toBytes("blank")
       val factory = new DecoderFactory()
       factory.configureDecoderBufferSize(256)
@@ -266,44 +294,9 @@ object HBaseFunctions {
         sampleIds.foreach((sample) => {
 
           val myRowKey: Array[String] = Bytes.toString(curr._2.getRow).split("_")
-          //println("myRowkey: " + myRowKey)
-
-          val contigName = myRowKey(0)
-          val startPos: Long = myRowKey(1).toLong
-          val refAllele = myRowKey(2)
-          val altAllele = myRowKey(3)
-          val endPos: Long = myRowKey(4).toLong
-
           val myVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
-          //val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal(0)), null)
-
-          val decoder = factory.configureDecoderBufferSize(256).binaryDecoder(CellUtil.cloneValue(myVal(0)), d)
-
-          //while (!decoder.isEnd) { resultList += genotypeDatumReader.read(null, decoder) }
-          val a1 = decoder.readInt()
-          val a2 = decoder.readInt()
-          val phaseSetId = decoder.readInt()
-          val isPhased = decoder.readBoolean()
-
-          val myGeno = new Genotype()
-
-          myGeno.variant = new Variant()
-          myGeno.variant.setReferenceAllele(refAllele)
-          myGeno.variant.setAlternateAllele(altAllele)
-
-          val allele1: GenotypeAllele = intToGenotypeAllele(a1)
-          val allele2: GenotypeAllele = intToGenotypeAllele(a2)
-
-          myGeno.setAlleles(List(allele1, allele2))
-          myGeno.setGenotypeLikelihoods(List())
-          myGeno.setNonReferenceLikelihoods(List())
-          myGeno.setStrandBiasComponents(List())
-          myGeno.setContigName(contigName)
-          myGeno.setSampleId(sample)
-          myGeno.setPhaseSetId(phaseSetId)
-          myGeno.setIsPhased(isPhased)
-          myGeno.setStart(startPos)
-          myGeno.setEnd(endPos)
+          val decoder: BinaryDecoder = factory.configureDecoderBufferSize(256).binaryDecoder(CellUtil.cloneValue(myVal(0)), d)
+          val myGeno = encoder1BytesToGenotype(decoder, myRowKey, sample)
 
           resultList += myGeno
 
@@ -312,6 +305,71 @@ object HBaseFunctions {
       })
 
     })
+    result
+  }
+
+  def loadRDDofVariantContextFromHBaseEncoder1(sc: SparkContext,
+                                               hbaseTableName: String,
+                                               sampleIds: List[String],
+                                               queryRegion: ReferenceRegion = null,
+                                               numPartitions: Int = 0): RDD[VariantContext] = {
+
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    if (queryRegion != null) {
+      val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
+      val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
+      scan.setStartRow(Bytes.toBytes(start))
+      scan.setStopRow(Bytes.toBytes(stop))
+    }
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    sampleIds.foreach(sampleId => {
+      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
+    })
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
+    else resultHBaseRDD
+
+    val result: RDD[VariantContext] = resultHBaseRDDrepar.mapPartitions((iterator) => {
+
+      val blank: Array[Byte] = Bytes.toBytes("blank")
+      val factory = new DecoderFactory()
+      factory.configureDecoderBufferSize(256)
+      var d = factory.binaryDecoder(blank, null)
+
+      iterator.map((curr) => {
+        var resultList = new ListBuffer[Genotype]
+        sampleIds.foreach((sample) => {
+
+          val myRowKey: Array[String] = Bytes.toString(curr._2.getRow).split("_")
+          val myVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
+          val decoder: BinaryDecoder = factory.configureDecoderBufferSize(256).binaryDecoder(CellUtil.cloneValue(myVal(0)), d)
+          val myGeno = encoder1BytesToGenotype(decoder, myRowKey, sample)
+
+          resultList += myGeno
+
+        })
+
+        resultList
+        val x = resultList.toList
+
+        val firstGenotype: Genotype = x.head
+        val currVar: RichVariant = RichVariant.genotypeToRichVariant(firstGenotype)
+        val currRefPos = ReferencePosition(currVar.variant.getContigName, currVar.variant.getStart)
+
+        val currVariantContext: VariantContext = new VariantContext(currRefPos, currVar, x)
+        currVariantContext
+      })
+
+    })
+
     result
   }
 
