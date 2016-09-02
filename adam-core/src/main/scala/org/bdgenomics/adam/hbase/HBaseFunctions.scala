@@ -242,12 +242,15 @@ object HBaseFunctions {
     myGeno.setGenotypeLikelihoods(List())
     myGeno.setNonReferenceLikelihoods(List())
     myGeno.setStrandBiasComponents(List())
+
+
     myGeno.setContigName(contigName)
     myGeno.setSampleId(sampleid)
     myGeno.setPhaseSetId(phaseSetId)
     myGeno.setIsPhased(isPhased)
     myGeno.setStart(startPos)
     myGeno.setEnd(endPos)
+
 
     myGeno
   }
