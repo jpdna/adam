@@ -539,7 +539,8 @@ object HBaseFunctions {
                                             vcRdd: VariantContextRDD,
                                             hbaseTableName: String,
                                             sequenceDictionaryId: String = null,
-                                            saveSequenceDictionary: Boolean = true): Unit = {
+                                            saveSequenceDictionary: Boolean = true,
+                                            numPartitions: Int = 0): Unit = {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
@@ -552,9 +553,12 @@ object HBaseFunctions {
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
+    val rddMaybeRepar = if (numPartitions > 0) vcRdd.rdd.repartition(numPartitions)
+    else vcRdd.rdd
+
     val data: RDD[VariantContext] = vcRdd.rdd
 
-    val genodata = vcRdd.rdd.mapPartitions((iterator) => {
+    val genodata = rddMaybeRepar.mapPartitions((iterator) => {
       val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
       val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
 
