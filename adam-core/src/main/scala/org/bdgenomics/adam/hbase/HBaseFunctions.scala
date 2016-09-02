@@ -615,6 +615,125 @@ object HBaseFunctions {
       })
   }
 
+  def saveVariantContextRDDToHBaseEncoding1BulkLoad(sc: SparkContext,
+                                                    vcRdd: VariantContextRDD,
+                                                    hbaseTableName: String,
+                                                    sequenceDictionaryId: String = null,
+                                                    saveSequenceDictionary: Boolean = true,
+                                                    numPartitions: Int = 0,
+                                                    stagingFolder: String): Unit = {
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
+
+    ///
+    /// Need an exception if SequenceDictionaryId is null an dsaveSequencDictionary is true
+    //
+
+    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+
+    val rddMaybeRepar = if (numPartitions > 0) vcRdd.rdd.repartition(numPartitions)
+    else vcRdd.rdd
+
+    val data: RDD[VariantContext] = vcRdd.rdd
+
+    val genodata = rddMaybeRepar.mapPartitions((iterator) => {
+      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
+
+      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
+        scala.reflect.classTag[Genotype]
+          .runtimeClass
+          .asInstanceOf[Class[Genotype]])
+
+      val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
+        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
+          putRecord.variant.variant.getReferenceAllele + "_" + putRecord.variant.variant.getAlternateAllele + "_" + (putRecord.variant.variant.getEnd - putRecord.variant.variant.getStart))
+
+        val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
+          genotypebaos.reset()
+
+          val a1 = geno.alleles(0).ordinal()
+          val a2 = geno.alleles(1).ordinal()
+
+          genotypeEncoder.writeInt(a1)
+          genotypeEncoder.writeInt(a2)
+
+          var phasesetid = geno.getPhaseSetId
+          if (phasesetid == null) { phasesetid = 0 }
+
+          genotypeEncoder.writeInt(phasesetid)
+          genotypeEncoder.writeBoolean(geno.getIsPhased)
+
+          genotypeEncoder.flush()
+          genotypebaos.flush()
+
+          (geno.getSampleId, genotypebaos.toByteArray)
+          //(geno.getSampleId, Bytes.toBytes("Dude"))
+        }).toList
+
+        (myRowKey, genotypes)
+
+      })
+
+      genotypesForHbase
+
+    })
+
+    /*
+    genodata.hbaseBulkPut(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      (putRecord) => {
+        val put = new Put(putRecord._1)
+
+        putRecord._2.foreach((x) => {
+          val sampleId: String = x._1
+          val genoBytes: Array[Byte] = x._2
+          put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes)
+        })
+        put
+      })
+      */
+
+    val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
+
+    val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
+
+    familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
+
+    genodata.hbaseBulkLoad(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      t => {
+        val data = new ListBuffer[(KeyFamilyQualifier, Array[Byte])]
+        val rowKey = t._1
+        val family = Bytes.toBytes("g")
+
+        t._2.foreach((x) => {
+
+          val qualifier: String = x._1
+          val value: Array[Byte] = x._2
+
+          val mykeyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, Bytes.toBytes(qualifier))
+
+          data += Tuple2(mykeyFamilyQualifier, value)
+
+        })
+
+        //Seq((keyFamilyQualifier, value)).iterator
+        data.iterator
+      },
+      stagingFolder, familyHBaseWriterOptions,
+      compactionExclude = false,
+      HConstants.DEFAULT_MAX_FILE_SIZE)
+    ("hadoop fs -chmod -R 777 " + stagingFolder) !
+    val conn = ConnectionFactory.createConnection(conf)
+    val load = new LoadIncrementalHFiles(conf)
+    load.doBulkLoad(new Path(stagingFolder), conn.getAdmin, conn.getTable(TableName.valueOf(hbaseTableName)), conn.getRegionLocator(TableName.valueOf(hbaseTableName)))
+
+  }
+
   def loadGenotypesFromHBaseToGenotypeRDD(sc: SparkContext,
                                           hbaseTableName: String,
                                           sampleIds: List[String],
@@ -731,6 +850,53 @@ object HBaseFunctions {
     }
     )
     result
+  }
+
+  // Alternative save functions that uses bulk load via map reduce
+  // At the moment, doesn't seem to offer performance advantage, more testing is needed on cluster to assess
+  def saveHBaseAlignmentsBulkLoad(sc: SparkContext, aRdd: AlignmentRecordRDD, hbaseTableName: String, hbaseColFam: String, hbaseCol: String, hbaseStagingFolder: String): Unit = {
+    //val rdd1 = aRdd.rdd.repartition(50).zipWithUniqueId()
+    val rdd1 = aRdd.rdd.zipWithUniqueId()
+    //val stagingFolder = "hdfs://x2.justin.org:8020/user/justin/jptemp5"
+    val stagingFolder = hbaseStagingFolder
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+    val rdd1Bytes = rdd1.mapPartitions((iterator) => {
+      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+      val alignmentRecordDatumWriter: DatumWriter[AlignmentRecord] = new SpecificDatumWriter[AlignmentRecord](scala.reflect.classTag[AlignmentRecord].runtimeClass.asInstanceOf[Class[AlignmentRecord]])
+      val myList = iterator.toList
+      myList.map((putRecord) => {
+        baos.reset()
+        val myRowKey = Bytes.toBytes(putRecord._1.getContigName + "_" + String.format("%10s", putRecord._1.getStart.toString).replace(' ', '0') + "_" + putRecord._2)
+        alignmentRecordDatumWriter.write(putRecord._1, encoder)
+        encoder.flush()
+        baos.flush()
+        (myRowKey, Bytes.toBytes(hbaseColFam), Bytes.toBytes(hbaseCol), baos.toByteArray())
+      }).iterator
+    }
+    )
+    val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
+    val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "PREFIX")
+    familyHBaseWriterOptions.put(Bytes.toBytes("columnFamily1"), f1Options)
+
+    rdd1Bytes.hbaseBulkLoad(hbaseContext,
+      TableName.valueOf(hbaseTableName),
+      t => {
+        val rowKey = t._1
+        val family: Array[Byte] = t._2
+        val qualifier = t._3
+        val value = t._4
+        val keyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, qualifier)
+        Seq((keyFamilyQualifier, value)).iterator
+      },
+      stagingFolder, familyHBaseWriterOptions,
+      compactionExclude = false,
+      HConstants.DEFAULT_MAX_FILE_SIZE)
+    ("hadoop fs -chmod -R 777 " + stagingFolder) !
+    val conn = ConnectionFactory.createConnection(conf)
+    val load = new LoadIncrementalHFiles(conf)
+    load.doBulkLoad(new Path(stagingFolder), conn.getAdmin, conn.getTable(TableName.valueOf(hbaseTableName)), conn.getRegionLocator(TableName.valueOf(hbaseTableName)))
   }
 
 }
