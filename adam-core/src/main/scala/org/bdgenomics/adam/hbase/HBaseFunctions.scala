@@ -259,7 +259,8 @@ object HBaseFunctions {
 
   def loadRDDofGenotypeFromHBaseEncoder1(sc: SparkContext,
                                          hbaseTableName: String,
-                                         sampleIds: List[String],
+                                         inputsampleIds: List[String],
+                                         sampleListFile: String = null,
                                          queryRegion: ReferenceRegion = null,
                                          numPartitions: Int = 0): RDD[Genotype] = {
 
@@ -276,6 +277,11 @@ object HBaseFunctions {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
+
+    var sampleIds: List[String] = inputsampleIds
+    if (sampleListFile != null) {
+      sampleIds = Source.fromFile(sampleListFile).getLines.toList
+    }
 
     sampleIds.foreach(sampleId => {
       scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
@@ -315,7 +321,8 @@ object HBaseFunctions {
 
   def loadRDDofVariantContextFromHBaseEncoder1(sc: SparkContext,
                                                hbaseTableName: String,
-                                               sampleIds: List[String],
+                                               inputsampleIds: List[String] = null,
+                                               sampleListFile: String = null,
                                                queryRegion: ReferenceRegion = null,
                                                numPartitions: Int = 0): RDD[VariantContext] = {
 
@@ -332,6 +339,11 @@ object HBaseFunctions {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
+
+    var sampleIds: List[String] = inputsampleIds
+    if (sampleListFile != null) {
+      sampleIds = Source.fromFile(sampleListFile).getLines.toList
+    }
 
     sampleIds.foreach(sampleId => {
       scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
@@ -380,7 +392,8 @@ object HBaseFunctions {
 
   def loadRDDofVariantContextFromHBase(sc: SparkContext,
                                        hbaseTableName: String,
-                                       sampleIds: List[String],
+                                       inputsampleIds: List[String] = null,
+                                       sampleListFile: String = null,
                                        queryRegion: ReferenceRegion = null,
                                        numPartitions: Int = 0): RDD[VariantContext] = {
 
@@ -397,6 +410,11 @@ object HBaseFunctions {
 
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
+
+    var sampleIds: List[String] = inputsampleIds
+    if (sampleListFile != null) {
+      sampleIds = Source.fromFile(sampleListFile).getLines.toList
+    }
 
     sampleIds.foreach(sampleId => {
       scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
@@ -435,6 +453,7 @@ object HBaseFunctions {
     })
 
     result
+
   }
 
   //////////////// End of private helper functions
@@ -756,7 +775,7 @@ object HBaseFunctions {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
-    val genotypes = loadRDDofVariantContextFromHBase(sc, hbaseTableName, sampleIds, queryRegion, numPartitions)
+    val genotypes = loadRDDofVariantContextFromHBase(sc, hbaseTableName, sampleIds, queryRegion = queryRegion, numPartitions = numPartitions)
     VariantContextRDD(genotypes, sequenceDictionary, sampleMetadata)
 
   }
