@@ -259,7 +259,7 @@ object HBaseFunctions {
 
   def loadRDDofGenotypeFromHBaseEncoder1(sc: SparkContext,
                                          hbaseTableName: String,
-                                         inputsampleIds: List[String],
+                                         inputsampleIds: List[String] = null,
                                          sampleListFile: String = null,
                                          queryRegion: ReferenceRegion = null,
                                          numPartitions: Int = 0): RDD[Genotype] = {
