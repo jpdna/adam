@@ -69,7 +69,7 @@ object HBaseFunctions {
     encoder.flush()
     baos.flush()
 
-    val put = new Put(Bytes.toBytes(sequenceDictionaryId))
+    val put: Put = new Put(Bytes.toBytes(sequenceDictionaryId))
     put.addColumn(Bytes.toBytes("meta"), Bytes.toBytes("contigdata"), baos.toByteArray)
     table.put(put)
 
@@ -916,6 +916,58 @@ object HBaseFunctions {
     val conn = ConnectionFactory.createConnection(conf)
     val load = new LoadIncrementalHFiles(conf)
     load.doBulkLoad(new Path(stagingFolder), conn.getAdmin, conn.getTable(TableName.valueOf(hbaseTableName)), conn.getRegionLocator(TableName.valueOf(hbaseTableName)))
+  }
+
+  def deleteSamplesFromHBase(sc: SparkContext,
+                             hbaseTableName: String,
+                             inputsampleIds: List[String] = null,
+                             sampleListFile: String = null,
+                             numPartitions: Int = 0): Unit = {
+
+    val scan = new Scan()
+    scan.setCaching(100)
+    scan.setMaxVersions(1)
+
+    val conf = HBaseConfiguration.create()
+    val hbaseContext = new HBaseContext(sc, conf)
+
+    var sampleIds: List[String] = inputsampleIds
+    if (sampleListFile != null) {
+      sampleIds = Source.fromFile(sampleListFile).getLines.toList
+    }
+
+    sampleIds.foreach(sampleId => {
+      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
+    })
+
+    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+
+    val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
+    else resultHBaseRDD
+
+    resultHBaseRDDrepar.foreachPartition((iterator) => {
+
+      val conf = HBaseConfiguration.create()
+      val connection = ConnectionFactory.createConnection(conf)
+      val myTable: Table = connection.getTable(TableName.valueOf(hbaseTableName))
+
+      val listofBatchDelete = new util.ArrayList[Delete]
+
+      iterator.map((curr) => {
+
+        val currDelete = new Delete(curr._2.getRow)
+
+        sampleIds.foreach((sample) => {
+          currDelete.addColumns(Bytes.toBytes("g"), Bytes.toBytes(sample))
+        })
+
+        listofBatchDelete.add(currDelete)
+
+      })
+
+      myTable.delete(listofBatchDelete)
+
+    })
   }
 
 }
