@@ -369,7 +369,7 @@ object HBaseFunctions {
           val myRowKey: Array[String] = Bytes.toString(curr._2.getRow).split("_")
           val myVal: java.util.List[Cell] = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
 
-          if(!myVal.isEmpty) {
+          if (!myVal.isEmpty) {
             val decoder: BinaryDecoder = factory.configureDecoderBufferSize(256).binaryDecoder(CellUtil.cloneValue(myVal(0)), d)
             val myGeno = encoder1BytesToGenotype(decoder, myRowKey, sample)
 
@@ -932,191 +932,17 @@ object HBaseFunctions {
     scan.setCaching(100)
     scan.setMaxVersions(1)
 
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-
-    var sampleIds: List[String] = inputsampleIds
-    if (sampleListFile != null) {
-      sampleIds = Source.fromFile(sampleListFile).getLines.toList
-    }
-
-    sampleIds.foreach(sampleId => {
-      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
-    })
-
-    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
-
-    val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
-    else resultHBaseRDD
-
-    resultHBaseRDDrepar.foreachPartition((iterator) => {
-
-      val conf = HBaseConfiguration.create()
-      val connection = ConnectionFactory.createConnection(conf)
-      val myTable: Table = connection.getTable(TableName.valueOf(hbaseTableName))
-
-      val listofBatchDelete = new util.ArrayList[Delete]
-
-      iterator.map((curr) => {
-
-        val currDelete = new Delete(curr._2.getRow)
-
-        sampleIds.foreach((sample) => {
-          currDelete.addColumns(Bytes.toBytes("g"), Bytes.toBytes(sample))
-        })
-
-        listofBatchDelete.add(currDelete)
-
-      })
-
-      myTable.delete(listofBatchDelete)
-
-    })
-  }
-
-
-
-
-def deleteSamplesFromHBase2(sc: SparkContext,
-hbaseTableName: String,
-inputsampleIds: List[String] = null,
-sampleListFile: String = null,
-numPartitions: Int = 0): (RDD[Int], Long) = {
-
-  val scan = new Scan()
-  scan.setCaching(100)
-  scan.setMaxVersions(1)
-
-  val queryRegion = new ReferenceRegion("2", 35000000,  35001000)
-
-  val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
-  val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
-  scan.setStartRow(Bytes.toBytes(start))
-  scan.setStopRow(Bytes.toBytes(stop))
-
-  val conf = HBaseConfiguration.create()
-  val hbaseContext = new HBaseContext(sc, conf)
-
-  var sampleIds: List[String] = inputsampleIds
-  if (sampleListFile != null) {
-  sampleIds = Source.fromFile(sampleListFile).getLines.toList
-}
-
-  sampleIds.foreach(sampleId => {
-  scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
-})
-
-  val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
-
-  val size_of_scan: Long = resultHBaseRDD.count()
-
-  val resultHBaseRDDrepar = if (numPartitions > 0) resultHBaseRDD.repartition(numPartitions)
-  else resultHBaseRDD
-
-  val resultRDD: RDD[Int] = resultHBaseRDDrepar.mapPartitions((iterator) => {
-
-  val conf = HBaseConfiguration.create()
-  val connection = ConnectionFactory.createConnection(conf)
-  val myTable: Table = connection.getTable(TableName.valueOf(hbaseTableName))
-
-  val listofBatchDelete = new java.util.ArrayList[Delete]
-
-  iterator.foreach((curr) => {
-
-  val currDelete = new Delete(curr._2.getRow)
-
-  sampleIds.foreach((sample) => {
-  currDelete.addColumns(Bytes.toBytes("g"), Bytes.toBytes(sample))
-  println("On row: " + curr._2.getRow.toString + " adding delete for sample: " + sample)
-})
-
-  println("Length of list of batch  delete: " + listofBatchDelete.size())
-  listofBatchDelete.add(currDelete)
-
-})
-
-  myTable.delete(listofBatchDelete)
-
-  val size_listDeletes: Int = listofBatchDelete.size()
-  val resultList: List[Int] = List(size_listDeletes)
-  resultList.toIterator
-
-
-  })
-  (resultRDD, size_of_scan)
-
-}
-
-
-
-  def deleteSamplesFromHBase3(sc: SparkContext,
-                              hbaseTableName: String,
-                              inputsampleIds: List[String] = null,
-                              sampleListFile: String = null,
-                              numPartitions: Int = 0): Unit = {
-
-    val scan = new Scan()
-    scan.setCaching(100)
-    scan.setMaxVersions(1)
-
-    val queryRegion = new ReferenceRegion("2", 35000000,  35001000)
-
-    val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
-    val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
-    scan.setStartRow(Bytes.toBytes(start))
-    scan.setStopRow(Bytes.toBytes(stop))
-
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-
-    var sampleIds: List[String] = inputsampleIds
-    if (sampleListFile != null) {
-      sampleIds = Source.fromFile(sampleListFile).getLines.toList
-    }
-
-    sampleIds.foreach(sampleId => {
-      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
-    })
-
-    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
-
-
-    hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)]( resultHBaseRDD,
-                                                               TableName.valueOf(hbaseTableName),
-                                                               putRecord => {
-                                                                 val currDelete = new Delete(putRecord._2.getRow)
-                                                                 sampleIds.foreach((sample) => {
-                                                                   currDelete.addColumns(Bytes.toBytes("g"), Bytes.toBytes(sample))
-                                                                 })
-                                                                 currDelete
-                                                               },
-                                                               4)
-
-
-
-  }
-
-
-  def deleteSamplesFromHBase4(sc: SparkContext,
-                              hbaseTableName: String,
-                              inputsampleIds: List[String] = null,
-                              sampleListFile: String = null,
-                              numPartitions: Int = 0): Unit = {
-
-    val scan = new Scan()
-    scan.setCaching(100)
-    scan.setMaxVersions(1)
-
     /*
-    val queryRegion = new ReferenceRegion("2", 35000000,  35001000)
 
+    //This eems unlikely to be used as a whole sample will be deleted at once - will remove soon
+
+    val queryRegion = new ReferenceRegion("2", 35000000,  35001000)
     val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
     val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
     scan.setStartRow(Bytes.toBytes(start))
     scan.setStopRow(Bytes.toBytes(stop))
     */
 
-
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
@@ -1131,8 +957,7 @@ numPartitions: Int = 0): (RDD[Int], Long) = {
 
     val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
-
-    hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)]( resultHBaseRDD,
+    hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)](resultHBaseRDD,
       TableName.valueOf(hbaseTableName),
       putRecord => {
         val currDelete = new Delete(putRecord._2.getRow)
@@ -1143,13 +968,7 @@ numPartitions: Int = 0): (RDD[Int], Long) = {
       },
       4)
 
-
-
   }
 
-
-
-
 }
-
 
