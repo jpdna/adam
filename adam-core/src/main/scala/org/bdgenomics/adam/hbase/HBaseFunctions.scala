@@ -367,7 +367,7 @@ object HBaseFunctions {
   def saveVariantContextRDDToHBaseBulk(sc: SparkContext,
                                        vcRdd: VariantContextRDD,
                                        hbaseTableName: String,
-                                       sequenceDictionaryId: String = null,
+                                       sequenceDictionaryId: String,
                                        saveSequenceDictionary: Boolean = true,
                                        numPartitions: Int = 0,
                                        stagingFolder: String): Unit = {

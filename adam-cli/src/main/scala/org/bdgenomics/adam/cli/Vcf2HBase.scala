@@ -83,6 +83,7 @@ class Vcf2HBase(protected val args: Vcf2HBaseArgs) extends BDGSparkCommand[Vcf2H
     HBaseFunctions.saveVariantContextRDDToHBaseBulk(sc,
       vcRdd,
       args.hbaseTable,
+      sequenceDictionaryId = args.seqDictId,
       numPartitions = args.repartitionNum,
       stagingFolder = args.stagingFolder)
 
