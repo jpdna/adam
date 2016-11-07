@@ -17,12 +17,8 @@
  */
 package org.bdgenomics.adam.cli
 
-import htsjdk.samtools.ValidationStringency
-import org.apache.parquet.filter2.dsl.Dsl._
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.bdgenomics.adam.algorithms.consensus._
+
 import org.bdgenomics.adam.hbase.HBaseFunctions
 import org.bdgenomics.adam.instrumentation.Timers._
 import org.bdgenomics.adam.models.{ RecordGroupDictionary, SequenceDictionary, SnpTable }
@@ -71,12 +67,6 @@ class Vcf2HBase(protected val args: Vcf2HBaseArgs) extends BDGSparkCommand[Vcf2H
   val companion = Transform
 
   def run(sc: SparkContext) {
-    println("This is vcfPath: " + args.vcfPath)
-    println("This is hbaseTable: " + args.hbaseTable)
-    println("This is seq_dict_id: " + args.seqDictId)
-    println("this is use existing_seq_dict: " + args.useExistingSeqDict)
-    println("this is repartion nun: " + args.repartitionNum)
-    println("this is stagingFolder: " + args.stagingFolder)
 
     val vcRdd = sc.loadVcf(args.vcfPath)
 

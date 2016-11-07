@@ -1,20 +1,13 @@
 package org.bdgenomics.adam.hbase
 
 import java.util
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase._
-import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.spark._
-import org.bdgenomics.adam.rdd.read.AlignmentRecordRDD
-import org.bdgenomics.adam.rdd.ADAMContext
-import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.projections.{ AlignmentRecordField, Filter, Projection }
-import org.bdgenomics.adam.rdd
 import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
 import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.formats.avro._
@@ -22,11 +15,9 @@ import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
 import org.apache.avro.specific.SpecificDatumWriter
-import org.apache.avro.file.DataFileWriter
 import org.apache.avro.io._
 import java.io.ByteArrayOutputStream
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
-import org.apache.hadoop.hbase.io.compress.Compression
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.{ FSDataInputStream, FileSystem, Path }
@@ -92,7 +83,7 @@ object HBaseFunctions {
       resultList += contigDatumReader.read(null, decoder)
     }
 
-    SequenceDictionary.fromAvro(resultList.toSeq)
+    SequenceDictionary.fromAvro(resultList)
 
   }
 
@@ -290,7 +281,6 @@ object HBaseFunctions {
         + String.format("%10s", g(1).toString).replace(' ', '0')))
 
     admin.createTable(tableDescriptor, splits)
-    //admin.create
 
     val hbaseTableName_meta = hbaseTableName + "_meta"
 
@@ -313,9 +303,6 @@ object HBaseFunctions {
     val hbaseContext = new HBaseContext(sc, conf)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
-
-    // assert(sequenceDictionaryId == null && saveSequenceDictionary == true),
-    //   println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null")
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
@@ -376,9 +363,6 @@ object HBaseFunctions {
     val hbaseContext = new HBaseContext(sc, conf)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
-
-    // assert(!(sequenceDictionaryId == null && saveSequenceDictionary == true),
-    //   println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null"))
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
