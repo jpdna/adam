@@ -59,10 +59,10 @@ class Vcf2HBaseArgs extends Args4jBase {
   @Args4jOption(required = false, name = "-use_existing_seqdict", usage = "Use an existing sequence dictionary, don't write a new one")
   var useExistingSeqDict: Boolean = false
 
-  @Args4jOption(required = false, name = "-repartitionNum", usage = "Reparition into N partitions prior to writing to HBase")
+  @Args4jOption(required = false, name = "-repartition_num", usage = "Reparition into N partitions prior to writing to HBase")
   var repartitionNum: Int = 0
 
-  @Args4jOption(required = true, name = "-stagingFolder", usage = "location for temporary files during bulk load")
+  @Args4jOption(required = true, name = "-staging_folder", usage = "location for temporary files during bulk load")
   var stagingFolder: String = null
 
 }

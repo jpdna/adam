@@ -314,8 +314,8 @@ object HBaseFunctions {
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
-    assert(!(sequenceDictionaryId == null && saveSequenceDictionary == true),
-      println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null"))
+    // assert(sequenceDictionaryId == null && saveSequenceDictionary == true),
+    //   println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null")
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
@@ -377,8 +377,8 @@ object HBaseFunctions {
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
-    assert(!(sequenceDictionaryId == null && saveSequenceDictionary == true),
-      println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null"))
+    // assert(!(sequenceDictionaryId == null && saveSequenceDictionary == true),
+    //   println("saveSequenceDictionary cannot be true if sequenceDictionaryId is null"))
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
