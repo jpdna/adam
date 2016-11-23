@@ -138,7 +138,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_2.10</artifactId>
+      <artifactId>spark-streaming_${scala.version.prefix}</artifactId>
     </dependency>
     <dependency>
       <groupId>it.unimi.dsi</groupId>
@@ -189,37 +189,25 @@
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-hadoop2-compat</artifactId>
-
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
-
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-it</artifactId>
-
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
-
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-spark</artifactId>
-
     </dependency>
-
-
   </dependencies>
 </project>
