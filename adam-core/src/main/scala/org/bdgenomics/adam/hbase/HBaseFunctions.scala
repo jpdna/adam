@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.spark._
-import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
+import org.bdgenomics.adam.rdd.variation.{ VariantContextRDD }
 import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.formats.avro._
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
@@ -295,63 +295,6 @@ object HBaseFunctions {
     admin.get.createTable(tableDescriptorMeta)
   }
 
-  def saveVariantContextRDDToHBase(sc: SparkContext,
-                                   vcRdd: VariantContextRDD,
-                                   hbaseTableName: String,
-                                   sequenceDictionaryId: String,
-                                   saveSequenceDictionary: Boolean = true): Unit = {
-
-    connectHbase(sc)
-    saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
-
-    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
-
-    val data = vcRdd.rdd.mapPartitions((iterator) => {
-      val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
-      val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
-
-      val genotypeDatumWriter: DatumWriter[Genotype] = new SpecificDatumWriter[Genotype](
-        scala.reflect.classTag[Genotype]
-          .runtimeClass
-          .asInstanceOf[Class[Genotype]])
-
-      val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
-
-        val myRowKey = KeyStrategy1.getKey(KeyStrategy1rowKeyInfo(putRecord.variant.variant.getContigName,
-          putRecord.variant.variant.getStart.toInt,
-          putRecord.variant.variant.getEnd.toInt,
-          putRecord.variant.variant.getReferenceAllele,
-          putRecord.variant.variant.getAlternateAllele))
-
-        val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
-          genotypebaos.reset()
-          genotypeDatumWriter.write(geno, genotypeEncoder)
-          genotypeEncoder.flush()
-          genotypebaos.flush()
-          (geno.getSampleId, genotypebaos.toByteArray)
-        }).toList
-
-        (myRowKey, genotypes)
-
-      })
-
-      genotypesForHbase
-
-    })
-
-    data.hbaseBulkPut(hbaseContext.get,
-      TableName.valueOf(hbaseTableName),
-      (putRecord) => {
-        val put = new Put(putRecord._1)
-
-        putRecord._2.foreach((x) => {
-          val sampleId: String = x._1
-          val genoBytes: Array[Byte] = x._2
-          put.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId), genoBytes)
-        })
-        put
-      })
-  }
 
   def saveVariantContextRDDToHBaseBulk(sc: SparkContext,
                                        vcRdd: VariantContextRDD,
