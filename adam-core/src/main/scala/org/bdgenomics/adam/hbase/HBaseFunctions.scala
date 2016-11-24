@@ -26,12 +26,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.spark._
-import org.bdgenomics.adam.rdd.variation.{GenotypeRDD, VariantContextRDD}
+import org.bdgenomics.adam.rdd.variation.{ GenotypeRDD, VariantContextRDD }
 import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.formats.avro._
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
+import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
 import org.apache.avro.specific.SpecificDatumWriter
 import org.apache.avro.io._
 import java.io.ByteArrayOutputStream
@@ -40,8 +40,8 @@ import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
-import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
-import org.bdgenomics.adam.models.{ReferencePosition, ReferenceRegion, SequenceDictionary, VariantContext}
+import org.apache.hadoop.fs.{ FSDataInputStream, FileSystem, Path }
+import org.bdgenomics.adam.models.{ ReferencePosition, ReferenceRegion, SequenceDictionary, VariantContext }
 
 import scala.io.Source
 import scala.collection.mutable.ListBuffer
@@ -56,11 +56,17 @@ object HBaseFunctions {
   var admin: Option[Admin] = None
   var hbaseContext: Option[HBaseContext] = None
 
-  def connectHbase(sc: SparkContext): Unit = {
-    conf = Some(HBaseConfiguration.create())
-    connection = Some(ConnectionFactory.createConnection(conf.get))
-    admin = Some(connection.get.getAdmin)
-    hbaseContext = Some(new HBaseContext(sc, conf.get))
+  private[hbase] def connectHbase(sc: SparkContext): Unit = {
+    if (!checkHbaseConnection) {
+      conf = Some(HBaseConfiguration.create())
+      connection = Some(ConnectionFactory.createConnection(conf.get))
+      admin = Some(connection.get.getAdmin)
+      hbaseContext = Some(new HBaseContext(sc, conf.get))
+    }
+  }
+
+  private[hbase] def checkHbaseConnection: Boolean = {
+    conf.isDefined && connection.isDefined && admin.isDefined && hbaseContext.isDefined
   }
 
   private[hbase] abstract class KeyStrategy[T, U] {
@@ -175,8 +181,8 @@ object HBaseFunctions {
   private[hbase] def loadSampleMetadataFromHBase(hbaseTableName: String,
                                                  sampleIds: List[String]): Seq[Sample] = {
 
-//    val conf = HBaseConfiguration.create()
-  //  val connection = ConnectionFactory.createConnection(conf)
+    //    val conf = HBaseConfiguration.create()
+    //  val connection = ConnectionFactory.createConnection(conf)
 
     val table = connection.get.getTable(TableName.valueOf(hbaseTableName))
 
@@ -275,10 +281,11 @@ object HBaseFunctions {
   }
 
   /// Begin public API
-  def createHBaseGenotypeTable(hbaseTableName: String, splitsFileName: String) {
+  def createHBaseGenotypeTable(sc: SparkContext, hbaseTableName: String, splitsFileName: String) {
     //val conf = HBaseConfiguration.create()
     //val connection = ConnectionFactory.createConnection(conf)
     //val admin = connection.getAdmin
+    connectHbase(sc)
 
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
     tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ)
@@ -310,6 +317,7 @@ object HBaseFunctions {
 
     //val conf = HBaseConfiguration.create()
     //val hbaseContext = new HBaseContext(sc, conf)
+    connectHbase(sc)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
@@ -362,7 +370,8 @@ object HBaseFunctions {
       })
   }
 
-  def saveVariantContextRDDToHBaseBulk(vcRdd: VariantContextRDD,
+  def saveVariantContextRDDToHBaseBulk(sc: SparkContext,
+                                       vcRdd: VariantContextRDD,
                                        hbaseTableName: String,
                                        sequenceDictionaryId: String,
                                        saveSequenceDictionary: Boolean = true,
@@ -371,7 +380,7 @@ object HBaseFunctions {
 
     //val conf = HBaseConfiguration.create()
     //val hbaseContext = new HBaseContext(sc, conf)
-
+    connectHbase(sc)
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
@@ -446,11 +455,13 @@ object HBaseFunctions {
 
   }
 
-  def deleteGenotypeSamplesFromHBase(hbaseTableName: String,
+  def deleteGenotypeSamplesFromHBase(sc: SparkContext,
+                                     hbaseTableName: String,
                                      sampleIds: Option[List[String]] = None,
                                      sampleListFile: Option[String] = None,
                                      partitions: Option[Int] = None): Unit = {
 
+    connectHbase(sc)
     val scan = new Scan()
     scan.setCaching(100)
     scan.setMaxVersions(1)
@@ -482,16 +493,16 @@ object HBaseFunctions {
       4)
   }
 
-  def loadGenotypesFromHBaseToVariantContextRDD(
+  def loadGenotypesFromHBaseToVariantContextRDD(sc: SparkContext,
                                                 hbaseTableName: String,
                                                 sampleIds: List[String],
                                                 sequenceDictionaryId: String,
                                                 queryRegion: Option[ReferenceRegion] = None, //one-based
                                                 partitions: Option[Int] = None): VariantContextRDD = {
 
+    connectHbase(sc)
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
-
     val genotypes = loadVariantContextsFromHBase(
       hbaseTableName,
       Option(sampleIds),
