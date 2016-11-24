@@ -48,20 +48,24 @@ import scala.collection.JavaConverters._
 
 object HBaseFunctions {
 
-  abstract class KeyStrategy[T, U] {
+  //val conf = HBaseConfiguration.create()
+  //val connection = ConnectionFactory.createConnection(conf)
+  //val admin = connection.getAdmin
+
+  private[hbase] abstract class KeyStrategy[T, U] {
     def getKey(rowKeyInfo: T): Array[Byte]
     def getKeyRangePrefix(rangePrefixInfo: U): (Array[Byte], Array[Byte])
   }
 
-  case class KeyStrategy1rowKeyInfo(contigName: String,
-                                    start: Int,
-                                    end: Int,
-                                    refAllele: String,
-                                    altAllele: String)
+  private[hbase] case class KeyStrategy1rowKeyInfo(contigName: String,
+                                                   start: Int,
+                                                   end: Int,
+                                                   refAllele: String,
+                                                   altAllele: String)
 
-  case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
+  private[hbase] case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
 
-  object KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
+  private[hbase] object KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
     def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = {
       Bytes.toBytes(rowKeyInfo.contigName + "_" +
         String.format("%10s", rowKeyInfo.start.toString).replace(' ', '0') + "_" +
@@ -79,9 +83,9 @@ object HBaseFunctions {
     }
   }
 
-  def saveSequenceDictionaryToHBase(hbaseTableName: String,
-                                    sequences: SequenceDictionary,
-                                    sequenceDictionaryId: String): Unit = {
+  private[hbase] def saveSequenceDictionaryToHBase(hbaseTableName: String,
+                                                   sequences: SequenceDictionary,
+                                                   sequenceDictionaryId: String): Unit = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -105,8 +109,8 @@ object HBaseFunctions {
     table.put(put)
   }
 
-  def loadSequenceDictionaryFromHBase(HbaseTableName: String,
-                                      sequenceDictionaryId: String): SequenceDictionary = {
+  private[hbase] def loadSequenceDictionaryFromHBase(HbaseTableName: String,
+                                                     sequenceDictionaryId: String): SequenceDictionary = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -131,8 +135,8 @@ object HBaseFunctions {
 
   }
 
-  def saveSampleMetadataToHBase(hbaseTableName: String,
-                                samples: Seq[Sample]): Unit = {
+  private[hbase] def saveSampleMetadataToHBase(hbaseTableName: String,
+                                               samples: Seq[Sample]): Unit = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -157,8 +161,8 @@ object HBaseFunctions {
     })
   }
 
-  def loadSampleMetadataFromHBase(hbaseTableName: String,
-                                  sampleIds: List[String]): Seq[Sample] = {
+  private[hbase] def loadSampleMetadataFromHBase(hbaseTableName: String,
+                                                 sampleIds: List[String]): Seq[Sample] = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
@@ -188,12 +192,12 @@ object HBaseFunctions {
 
   }
 
-  def loadVariantContextsFromHBase(sc: SparkContext,
-                                   hbaseTableName: String,
-                                   sampleIds: Option[List[String]] = None,
-                                   sampleListFile: Option[String] = None,
-                                   queryRegion: Option[ReferenceRegion] = None,
-                                   partitions: Option[Int] = None): RDD[VariantContext] = {
+  private[hbase] def loadVariantContextsFromHBase(sc: SparkContext,
+                                                  hbaseTableName: String,
+                                                  sampleIds: Option[List[String]] = None,
+                                                  sampleListFile: Option[String] = None,
+                                                  queryRegion: Option[ReferenceRegion] = None,
+                                                  partitions: Option[Int] = None): RDD[VariantContext] = {
 
     val scan = new Scan()
     scan.setCaching(100)
@@ -259,6 +263,7 @@ object HBaseFunctions {
     result
   }
 
+  /// Begin public API
   def createHBaseGenotypeTable(hbaseTableName: String, splitsFileName: String) {
     val conf = HBaseConfiguration.create()
 
@@ -468,7 +473,6 @@ object HBaseFunctions {
         currDelete
       },
       4)
-
   }
 
   def loadGenotypesFromHBaseToVariantContextRDD(sc: SparkContext,
