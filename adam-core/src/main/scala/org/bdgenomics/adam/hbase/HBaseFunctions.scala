@@ -104,8 +104,6 @@ object HBaseFunctions {
                                                    sequences: SequenceDictionary,
                                                    sequenceDictionaryId: String): Unit = {
 
-    //val conf = HBaseConfiguration.create()
-    //val connection = ConnectionFactory.createConnection(conf)
     val table: Table = connection.get.getTable(TableName.valueOf(hbaseTableName))
     val contigs = sequences.toAvro
 
@@ -129,8 +127,6 @@ object HBaseFunctions {
   private[hbase] def loadSequenceDictionaryFromHBase(HbaseTableName: String,
                                                      sequenceDictionaryId: String): SequenceDictionary = {
 
-    //val conf = HBaseConfiguration.create()
-    //val connection = ConnectionFactory.createConnection(conf)
     val table = connection.get.getTable(TableName.valueOf(HbaseTableName))
 
     val myGet = new Get(Bytes.toBytes(sequenceDictionaryId))
@@ -155,8 +151,6 @@ object HBaseFunctions {
   private[hbase] def saveSampleMetadataToHBase(hbaseTableName: String,
                                                samples: Seq[Sample]): Unit = {
 
-    //val conf = HBaseConfiguration.create()
-    //val connection = ConnectionFactory.createConnection(conf)
     val table = connection.get.getTable(TableName.valueOf(hbaseTableName))
 
     samples.foreach((x) => {
@@ -181,8 +175,6 @@ object HBaseFunctions {
   private[hbase] def loadSampleMetadataFromHBase(hbaseTableName: String,
                                                  sampleIds: List[String]): Seq[Sample] = {
 
-    //    val conf = HBaseConfiguration.create()
-    //  val connection = ConnectionFactory.createConnection(conf)
 
     val table = connection.get.getTable(TableName.valueOf(hbaseTableName))
 
@@ -229,9 +221,6 @@ object HBaseFunctions {
         scan.setStopRow(stop)
       }
     }
-
-    //val conf = HBaseConfiguration.create()
-    //val hbaseContext = new HBaseContext(sc, conf)
 
     val sampleIdsFinal: List[String] =
       if (sampleListFile.isDefined) {
@@ -282,11 +271,8 @@ object HBaseFunctions {
 
   /// Begin public API
   def createHBaseGenotypeTable(sc: SparkContext, hbaseTableName: String, splitsFileName: String) {
-    //val conf = HBaseConfiguration.create()
-    //val connection = ConnectionFactory.createConnection(conf)
-    //val admin = connection.getAdmin
-    connectHbase(sc)
 
+    connectHbase(sc)
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
     tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ)
       .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
@@ -315,10 +301,7 @@ object HBaseFunctions {
                                    sequenceDictionaryId: String,
                                    saveSequenceDictionary: Boolean = true): Unit = {
 
-    //val conf = HBaseConfiguration.create()
-    //val hbaseContext = new HBaseContext(sc, conf)
     connectHbase(sc)
-
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
@@ -375,22 +358,19 @@ object HBaseFunctions {
                                        hbaseTableName: String,
                                        sequenceDictionaryId: String,
                                        saveSequenceDictionary: Boolean = true,
-                                       numPartitions: Int = 0,
+                                       partitions: Option[Int] = None,
                                        stagingFolder: String): Unit = {
 
-    //val conf = HBaseConfiguration.create()
-    //val hbaseContext = new HBaseContext(sc, conf)
+
     connectHbase(sc)
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
 
     if (saveSequenceDictionary) saveSequenceDictionaryToHBase(hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
-    val rddMaybeRepar = if (numPartitions > 0) vcRdd.rdd.repartition(numPartitions)
+     val rdd = if (partitions.isDefined) vcRdd.rdd.repartition(partitions.get)
     else vcRdd.rdd
 
-    val data: RDD[VariantContext] = vcRdd.rdd
-
-    val genodata = rddMaybeRepar.mapPartitions((iterator) => {
+    val genodata = rdd.mapPartitions((iterator) => {
       val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
       val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
 
@@ -449,7 +429,6 @@ object HBaseFunctions {
       compactionExclude = false,
       HConstants.DEFAULT_MAX_FILE_SIZE)
     ("hadoop fs -chmod -R 777 " + stagingFolder) !
-    //val conn = ConnectionFactory.createConnection(conf)
     val load = new LoadIncrementalHFiles(conf.get)
     load.doBulkLoad(new Path(stagingFolder), admin.get, connection.get.getTable(TableName.valueOf(hbaseTableName)), connection.get.getRegionLocator(TableName.valueOf(hbaseTableName)))
 
@@ -465,9 +444,6 @@ object HBaseFunctions {
     val scan = new Scan()
     scan.setCaching(100)
     scan.setMaxVersions(1)
-
-    //val conf = HBaseConfiguration.create()
-    //val hbaseContext = new HBaseContext(sc, conf)
 
     val sampleIdsFinal: List[String] =
       if (sampleListFile.isDefined) {
