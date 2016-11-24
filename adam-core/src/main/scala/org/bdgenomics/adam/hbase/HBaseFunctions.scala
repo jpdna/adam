@@ -48,6 +48,24 @@ import scala.collection.JavaConverters._
 
 object HBaseFunctions {
 
+  abstract class KeyStrategy[T, U] {
+    def getKey(rowKeyInfo: T): Array[Byte]
+    def getKeyRangePrefix(rangePrefixInfo: U): Array[Byte]
+  }
+
+  case class KeyStrategy1rowKeyInfo(contigName: String,
+                                    start: Int,
+                                    end: Int,
+                                    refAllele: String,
+                                    altAllele: String)
+
+  case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
+
+  class KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
+    def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = { Bytes.toBytes("test") }
+    def getKeyRangePrefix(rangePrefixInfo: KeyStrategy1RangePrefixInfo): Array[Byte] = { Bytes.toBytes("test") }
+  }
+
   def saveSequenceDictionaryToHBase(hbaseTableName: String,
                                     sequences: SequenceDictionary,
                                     sequenceDictionaryId: String): Unit = {
@@ -222,6 +240,7 @@ object HBaseFunctions {
     queryRegion.foreach { (queryRegion) =>
       val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
       val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
+
       scan.setStartRow(Bytes.toBytes(start))
       scan.setStopRow(Bytes.toBytes(stop))
     }
