@@ -230,8 +230,9 @@ object HBaseFunctions {
     val hbaseContext = new HBaseContext(sc, conf)
 
     //var sampleIdsLst: List[String] = sampleIds
+
     val sampleIdsFinal: List[String] =
-      if (sampleListFile != null) {
+      if (sampleListFile.isDefined) {
         val sampleIdsLst: List[String] = Source.fromFile(sampleListFile.get).getLines.toList
         sampleIdsLst.foreach((sampleId) => { scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId)) })
         sampleIdsLst
