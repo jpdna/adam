@@ -50,7 +50,7 @@ object HBaseFunctions {
 
   abstract class KeyStrategy[T, U] {
     def getKey(rowKeyInfo: T): Array[Byte]
-    def getKeyRangePrefix(rangePrefixInfo: U): Array[Byte]
+    def getKeyRangePrefix(rangePrefixInfo: U): (Array[Byte], Array[Byte])
   }
 
   case class KeyStrategy1rowKeyInfo(contigName: String,
@@ -61,9 +61,22 @@ object HBaseFunctions {
 
   case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
 
-  class KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
-    def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = { Bytes.toBytes("test") }
-    def getKeyRangePrefix(rangePrefixInfo: KeyStrategy1RangePrefixInfo): Array[Byte] = { Bytes.toBytes("test") }
+  object KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
+    def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = {
+      Bytes.toBytes(rowKeyInfo.contigName + "_" +
+        String.format("%10s", rowKeyInfo.start.toString).replace(' ', '0') + "_" +
+        rowKeyInfo.refAllele + "_" +
+        rowKeyInfo.altAllele + "_" +
+        (rowKeyInfo.end - rowKeyInfo.start).toString)
+    }
+
+    def getKeyRangePrefix(rangePrefixInfo: KeyStrategy1RangePrefixInfo): (Array[Byte], Array[Byte]) = {
+      val start = Bytes.toBytes(rangePrefixInfo.queryRegion.referenceName + "_" +
+        String.format("%10s", rangePrefixInfo.queryRegion.start.toString).replace(' ', '0'))
+      val stop = Bytes.toBytes(rangePrefixInfo.queryRegion.referenceName + "_" +
+        String.format("%10s", rangePrefixInfo.queryRegion.end.toString).replace(' ', '0'))
+      (start, stop)
+    }
   }
 
   def saveSequenceDictionaryToHBase(hbaseTableName: String,
@@ -237,12 +250,14 @@ object HBaseFunctions {
     scan.setCaching(100)
     scan.setMaxVersions(1)
 
-    queryRegion.foreach { (queryRegion) =>
-      val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
-      val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
+    queryRegion.foreach { (currQueryRegion) =>
+      {
 
-      scan.setStartRow(Bytes.toBytes(start))
-      scan.setStopRow(Bytes.toBytes(stop))
+        val (start, stop) = KeyStrategy1.getKeyRangePrefix(KeyStrategy1RangePrefixInfo(currQueryRegion))
+
+        scan.setStartRow(start)
+        scan.setStopRow(stop)
+      }
     }
 
     val conf = HBaseConfiguration.create()
