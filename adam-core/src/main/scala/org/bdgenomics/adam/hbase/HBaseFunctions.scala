@@ -105,12 +105,12 @@ object HBaseFunctions {
     table.put(put)
   }
 
-  def loadSequenceDictionaryFromHBase(hbaseTableName: String,
+  def loadSequenceDictionaryFromHBase(HbaseTableName: String,
                                       sequenceDictionaryId: String): SequenceDictionary = {
 
     val conf = HBaseConfiguration.create()
     val connection = ConnectionFactory.createConnection(conf)
-    val table = connection.getTable(TableName.valueOf(hbaseTableName))
+    val table = connection.getTable(TableName.valueOf(HbaseTableName))
 
     val myGet = new Get(Bytes.toBytes(sequenceDictionaryId))
     val result = table.get(myGet)
@@ -188,57 +188,6 @@ object HBaseFunctions {
 
   }
 
-  def loadGenotypeFromHBase(sc: SparkContext,
-                            hbaseTableName: String,
-                            sampleIds: List[String],
-                            queryRegion: ReferenceRegion = null,
-                            partitions: Int = 0): RDD[Genotype] = {
-
-    val scan = new Scan()
-    scan.setCaching(100)
-    scan.setMaxVersions(1)
-
-    if (queryRegion != null) {
-      val start = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.start.toString).replace(' ', '0')
-      val stop = queryRegion.referenceName + "_" + String.format("%10s", queryRegion.end.toString).replace(' ', '0')
-      scan.setStartRow(Bytes.toBytes(start))
-      scan.setStopRow(Bytes.toBytes(stop))
-    }
-
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-
-    sampleIds.foreach(sampleId => {
-      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
-    })
-
-    val resultHBaseRDD = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
-
-    val resultHBaseRDDrepar = if (partitions > 0) resultHBaseRDD.repartition(partitions)
-    else resultHBaseRDD
-
-    val result: RDD[Genotype] = resultHBaseRDDrepar.mapPartitions((iterator) => {
-
-      val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
-        .runtimeClass
-        .asInstanceOf[Class[Genotype]])
-
-      iterator.flatMap((curr) => {
-        var resultList = new ListBuffer[Genotype]
-        sampleIds.foreach((sample) => {
-          val myVal: util.List[Cell] = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
-          val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(myVal.get(0)), null)
-          while (!decoder.isEnd) {
-            resultList += genotypeDatumReader.read(null, decoder)
-          }
-        })
-        resultList
-      })
-
-    })
-    result
-  }
-
   def loadVariantContextsFromHBase(sc: SparkContext,
                                    hbaseTableName: String,
                                    sampleIds: Option[List[String]] = None,
@@ -263,8 +212,6 @@ object HBaseFunctions {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
-    //var sampleIdsLst: List[String] = sampleIds
-
     val sampleIdsFinal: List[String] =
       if (sampleListFile.isDefined) {
         val sampleIdsLst: List[String] = Source.fromFile(sampleListFile.get).getLines.toList
@@ -288,7 +235,7 @@ object HBaseFunctions {
 
       iterator.map((curr) => {
         var resultList = new ListBuffer[Genotype]
-        sampleIds.get.foreach((sample) => {
+        sampleIdsFinal.foreach((sample) => {
           val sampleVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
           val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(sampleVal.get(0)), null)
           while (!decoder.isEnd) {
@@ -310,7 +257,6 @@ object HBaseFunctions {
     })
 
     result
-
   }
 
   def createHBaseGenotypeTable(hbaseTableName: String, splitsFileName: String) {
@@ -345,11 +291,10 @@ object HBaseFunctions {
   def saveVariantContextRDDToHBase(sc: SparkContext,
                                    vcRdd: VariantContextRDD,
                                    hbaseTableName: String,
-                                   sequenceDictionaryId: String = null,
+                                   sequenceDictionaryId: String,
                                    saveSequenceDictionary: Boolean = true): Unit = {
 
     val conf = HBaseConfiguration.create()
-
     val hbaseContext = new HBaseContext(sc, conf)
 
     saveSampleMetadataToHBase(hbaseTableName + "_meta", vcRdd.samples)
@@ -366,8 +311,12 @@ object HBaseFunctions {
           .asInstanceOf[Class[Genotype]])
 
       val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
-        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" + String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
-          putRecord.variant.variant.getReferenceAllele + "_" + putRecord.variant.variant.getAlternateAllele + "_" + putRecord.variant.variant.getEnd)
+
+        val myRowKey = KeyStrategy1.getKey(KeyStrategy1rowKeyInfo(putRecord.variant.variant.getContigName,
+          putRecord.variant.variant.getStart.toInt,
+          putRecord.variant.variant.getEnd.toInt,
+          putRecord.variant.variant.getReferenceAllele,
+          putRecord.variant.variant.getAlternateAllele))
 
         val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
           genotypebaos.reset()
@@ -429,11 +378,12 @@ object HBaseFunctions {
           .asInstanceOf[Class[Genotype]])
 
       val genotypesForHbase: Iterator[(Array[Byte], List[(String, Array[Byte])])] = iterator.map((putRecord) => {
-        val myRowKey = Bytes.toBytes(putRecord.variant.variant.getContigName + "_" +
-          String.format("%10s", putRecord.variant.variant.getStart.toString).replace(' ', '0') + "_" +
-          putRecord.variant.variant.getReferenceAllele + "_" +
-          putRecord.variant.variant.getAlternateAllele +
-          "_" + (putRecord.variant.variant.getEnd - putRecord.variant.variant.getStart))
+
+        val myRowKey = KeyStrategy1.getKey(KeyStrategy1rowKeyInfo(putRecord.variant.variant.getContigName,
+          putRecord.variant.variant.getStart.toInt,
+          putRecord.variant.variant.getEnd.toInt,
+          putRecord.variant.variant.getReferenceAllele,
+          putRecord.variant.variant.getAlternateAllele))
 
         val genotypes: List[(String, Array[Byte])] = putRecord.genotypes.map((geno) => {
           genotypebaos.reset()
@@ -449,7 +399,6 @@ object HBaseFunctions {
     })
 
     val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
-
     val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
 
     familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
@@ -486,9 +435,9 @@ object HBaseFunctions {
 
   def deleteGenotypeSamplesFromHBase(sc: SparkContext,
                                      hbaseTableName: String,
-                                     inputsampleIds: List[String] = null,
-                                     sampleListFile: String = null,
-                                     numPartitions: Int = 0): Unit = {
+                                     sampleIds: Option[List[String]] = None,
+                                     sampleListFile: Option[String] = None,
+                                     partitions: Option[Int] = None): Unit = {
 
     val scan = new Scan()
     scan.setCaching(100)
@@ -497,14 +446,15 @@ object HBaseFunctions {
     val conf = HBaseConfiguration.create()
     val hbaseContext = new HBaseContext(sc, conf)
 
-    var sampleIds: List[String] = inputsampleIds
-    if (sampleListFile != null) {
-      sampleIds = Source.fromFile(sampleListFile).getLines.toList
-    }
-
-    sampleIds.foreach(sampleId => {
-      scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId))
-    })
+    val sampleIdsFinal: List[String] =
+      if (sampleListFile.isDefined) {
+        val sampleIdsLst: List[String] = Source.fromFile(sampleListFile.get).getLines.toList
+        sampleIdsLst.foreach((sampleId) => { scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId)) })
+        sampleIdsLst
+      } else {
+        sampleIds.get.foreach((sampleId) => { scan.addColumn(Bytes.toBytes("g"), Bytes.toBytes(sampleId)) })
+        sampleIds.get
+      }
 
     val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
@@ -512,7 +462,7 @@ object HBaseFunctions {
       TableName.valueOf(hbaseTableName),
       putRecord => {
         val currDelete = new Delete(putRecord._2.getRow)
-        sampleIds.foreach((sample) => {
+        sampleIdsFinal.foreach((sample) => {
           currDelete.addColumns(Bytes.toBytes("g"), Bytes.toBytes(sample))
         })
         currDelete
@@ -521,25 +471,12 @@ object HBaseFunctions {
 
   }
 
-  def loadGenotypesFromHBaseToGenotypeRDD(sc: SparkContext,
-                                          hbaseTableName: String,
-                                          sampleIds: List[String],
-                                          sequenceDictionaryId: String,
-                                          queryRegion: ReferenceRegion = null, //one-based
-                                          partitions: Int = 0): GenotypeRDD = {
-
-    val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
-    val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
-    val genotypes = loadGenotypeFromHBase(sc, hbaseTableName, sampleIds, queryRegion, partitions)
-    GenotypeRDD(genotypes, sequenceDictionary, sampleMetadata)
-  }
-
   def loadGenotypesFromHBaseToVariantContextRDD(sc: SparkContext,
                                                 hbaseTableName: String,
                                                 sampleIds: List[String],
                                                 sequenceDictionaryId: String,
-                                                queryRegion: ReferenceRegion = null, //one-based
-                                                partitions: Int = 0): VariantContextRDD = {
+                                                queryRegion: Option[ReferenceRegion] = None, //one-based
+                                                partitions: Option[Int] = None): VariantContextRDD = {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(hbaseTableName + "_meta", sampleIds)
@@ -547,10 +484,11 @@ object HBaseFunctions {
     val genotypes = loadVariantContextsFromHBase(sc,
       hbaseTableName,
       Option(sampleIds),
-      queryRegion = Option(queryRegion),
-      partitions = Option(partitions))
+      queryRegion = queryRegion,
+      partitions = partitions)
 
     VariantContextRDD(genotypes, sequenceDictionary, sampleMetadata)
 
   }
+
 }
