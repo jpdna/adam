@@ -209,5 +209,6 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-spark</artifactId>
     </dependency>
+
   </dependencies>
 </project>

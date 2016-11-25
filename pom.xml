@@ -654,6 +654,13 @@
         <version>1.2.0-cdh5.8.0</version>
       </dependency>
 
+      <!--
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-testing-util</artifactId>
+        <version>1.2.0-cdh5.8.0</version>
+      </dependency>
+       -->
 
 
 
