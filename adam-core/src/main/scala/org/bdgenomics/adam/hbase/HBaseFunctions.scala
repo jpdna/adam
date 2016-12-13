@@ -65,10 +65,11 @@ object HBaseFunctions {
     def getTable(tableName: TableName): Table = { connection.getTable(tableName) }
     def getHBaseRDD() {}
 
+
     def hbaseBulkLoad2(genodata: RDD[(Array[Byte], List[(String, Array[Byte])])],
                        hbaseTableName: String,
                        flatMap: scala.Function1[(Array[Byte], List[(String, Array[Byte])]), scala.Iterator[scala.Tuple2[org.apache.hadoop.hbase.spark.KeyFamilyQualifier, scala.Array[scala.Byte]]]],
-                       stagingFolder: scala.Predef.String) = {
+                       stagingFolder: String) = {
 
       val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
       val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
@@ -88,6 +89,8 @@ object HBaseFunctions {
 
     }
 
+
+    /*
     def hbaseBulkLoad(genodata: RDD[(Array[Byte], List[(String, Array[Byte])])],
                       hbaseTableName: String,
                       stagingFolder: String): Unit = {
@@ -126,6 +129,7 @@ object HBaseFunctions {
         connection.getTable(TableName.valueOf(hbaseTableName)),
         connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
     }
+    */
 
     def hbaseBulkDelete() {}
 
@@ -421,7 +425,7 @@ object HBaseFunctions {
       genotypesForHbase
     })
 
-    dao.hbaseBulkLoad(genodata, hbaseTableName, stagingFolder)
+    //dao.hbaseBulkLoad(genodata, hbaseTableName, stagingFolder)
 
     val bulkLoadFlatMap = (t: (Array[Byte], List[(String, Array[Byte])])) => {
       val data = new ListBuffer[(KeyFamilyQualifier, Array[Byte])]
