@@ -70,7 +70,7 @@ class Vcf2HBase(protected val args: Vcf2HBaseArgs) extends BDGSparkCommand[Vcf2H
 
     val vcRdd = sc.loadVcf(args.vcfPath)
 
-    val hbaseConnection = new HBaseFunctions.ADAMHBaseConnection(sc)
+    val hbaseConnection = new HBaseFunctions.HBaseSparkDAO(sc)
     HBaseFunctions.saveVariantContextRDDToHBaseBulk(hbaseConnection,
       vcRdd,
       args.hbaseTable,

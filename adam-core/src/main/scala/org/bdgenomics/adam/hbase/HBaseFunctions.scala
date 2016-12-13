@@ -50,7 +50,88 @@ import scala.collection.JavaConverters._
 
 object HBaseFunctions {
 
-  // Provding only SparkContext means default Hbase configuration will be used
+  class HBaseSparkDAO(sc: SparkContext,
+                      inConf: Option[Configuration] = None,
+                      inConnection: Option[Connection] = None,
+                      inAdmin: Option[Admin] = None,
+                      inHBaseContext: Option[HBaseContext] = None) {
+
+    val conf = if (inConf.isDefined) inConf.get else HBaseConfiguration.create()
+    val connection = if (inConnection.isDefined) inConnection.get else ConnectionFactory.createConnection(conf)
+    val admin = if (inAdmin.isDefined) inAdmin.get else connection.getAdmin
+    val hbaseContext = if (inHBaseContext.isDefined) inHBaseContext.get else new HBaseContext(sc, conf)
+
+    def createTable(tableDescriptorMeta: HTableDescriptor) { admin.createTable(tableDescriptorMeta) }
+    def getTable(tableName: TableName): Table = { connection.getTable(tableName) }
+    def getHBaseRDD() {}
+
+    def hbaseBulkLoad2(genodata: RDD[(Array[Byte], List[(String, Array[Byte])])],
+                       hbaseTableName: String,
+                       flatMap: scala.Function1[(Array[Byte], List[(String, Array[Byte])]), scala.Iterator[scala.Tuple2[org.apache.hadoop.hbase.spark.KeyFamilyQualifier, scala.Array[scala.Byte]]]],
+                       stagingFolder: scala.Predef.String) = {
+
+      val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
+      val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
+      familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
+
+      genodata.hbaseBulkLoad(hbaseContext,
+        TableName.valueOf(hbaseTableName),
+        flatMap,
+        stagingFolder,
+        familyHBaseWriterOptions,
+        compactionExclude = false,
+        HConstants.DEFAULT_MAX_FILE_SIZE)
+
+      ("hadoop fs -chmod -R 777 " + stagingFolder) !
+      val load = new LoadIncrementalHFiles(conf)
+      load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)), connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
+
+    }
+
+    def hbaseBulkLoad(genodata: RDD[(Array[Byte], List[(String, Array[Byte])])],
+                      hbaseTableName: String,
+                      stagingFolder: String): Unit = {
+
+      val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
+      val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
+      familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
+
+      genodata.hbaseBulkLoad(hbaseContext,
+        TableName.valueOf(hbaseTableName),
+        t => {
+          val data = new ListBuffer[(KeyFamilyQualifier, Array[Byte])]
+          val rowKey = t._1
+          val family = Bytes.toBytes("g")
+
+          t._2.foreach((x) => {
+
+            val qualifier: String = x._1
+            val value: Array[Byte] = x._2
+
+            val mykeyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, Bytes.toBytes(qualifier))
+
+            data += Tuple2(mykeyFamilyQualifier, value)
+
+          })
+
+          data.iterator
+        },
+        stagingFolder, familyHBaseWriterOptions,
+        compactionExclude = false,
+        HConstants.DEFAULT_MAX_FILE_SIZE)
+      ("hadoop fs -chmod -R 777 " + stagingFolder) !
+      val load = new LoadIncrementalHFiles(conf)
+      load.doBulkLoad(new Path(stagingFolder),
+        admin,
+        connection.getTable(TableName.valueOf(hbaseTableName)),
+        connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
+    }
+
+    def hbaseBulkDelete() {}
+
+  }
+
+  // Providing only SparkContext means default Hbase configuration will be used
   class ADAMHBaseConnection(sc: SparkContext, inConf: Option[Configuration] = None, inConnection: Option[Connection] = None, inAdmin: Option[Admin] = None, inHBaseContext: Option[HBaseContext] = None) {
     val conf = if (inConf.isDefined) inConf.get else HBaseConfiguration.create()
     val connection = if (inConnection.isDefined) inConnection.get else ConnectionFactory.createConnection(conf)
@@ -95,12 +176,12 @@ object HBaseFunctions {
     }
   }
 
-  private[hbase] def saveSequenceDictionaryToHBase(conn: ADAMHBaseConnection,
+  private[hbase] def saveSequenceDictionaryToHBase(dao: HBaseSparkDAO,
                                                    hbaseTableName: String,
                                                    sequences: SequenceDictionary,
                                                    sequenceDictionaryId: String): Unit = {
 
-    val table: Table = conn.connection.getTable(TableName.valueOf(hbaseTableName))
+    val table: Table = dao.getTable(TableName.valueOf(hbaseTableName))
     val contigs = sequences.toAvro
 
     val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
@@ -145,11 +226,11 @@ object HBaseFunctions {
 
   }
 
-  private[hbase] def saveSampleMetadataToHBase(conn: ADAMHBaseConnection,
+  private[hbase] def saveSampleMetadataToHBase(dao: HBaseSparkDAO,
                                                hbaseTableName: String,
                                                samples: Seq[Sample]): Unit = {
 
-    val table = conn.connection.getTable(TableName.valueOf(hbaseTableName))
+    val table: Table = dao.getTable(TableName.valueOf(hbaseTableName))
 
     samples.foreach((x) => {
       val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
@@ -231,7 +312,7 @@ object HBaseFunctions {
         sampleIds.get
       }
 
-    val resultHBaseRDD = conn.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = conn.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
     val resultHBaseRDDrepar = if (partitions.isDefined) resultHBaseRDD.repartition(partitions.get)
     else resultHBaseRDD
@@ -287,7 +368,7 @@ object HBaseFunctions {
 
     val hbaseTableNameMeta = hbaseTableName + "_meta"
 
-    val tableDescriptorMeta = new HTableDescriptor(TableName.valueOf(hbaseTableNameMeta))
+    val tableDescriptorMeta: HTableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableNameMeta))
     tableDescriptorMeta.addFamily(new HColumnDescriptor("meta".getBytes())
       .setCompressionType(Algorithm.GZ)
       .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
@@ -295,7 +376,7 @@ object HBaseFunctions {
     conn.admin.createTable(tableDescriptorMeta)
   }
 
-  def saveVariantContextRDDToHBaseBulk(conn: ADAMHBaseConnection,
+  def saveVariantContextRDDToHBaseBulk(dao: HBaseSparkDAO,
                                        vcRdd: VariantContextRDD,
                                        hbaseTableName: String,
                                        sequenceDictionaryId: String,
@@ -303,14 +384,14 @@ object HBaseFunctions {
                                        partitions: Option[Int] = None,
                                        stagingFolder: String): Unit = {
 
-    saveSampleMetadataToHBase(conn, hbaseTableName + "_meta", vcRdd.samples)
+    saveSampleMetadataToHBase(dao, hbaseTableName + "_meta", vcRdd.samples)
 
-    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(conn, hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(dao, hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
 
     val rdd = if (partitions.isDefined) vcRdd.rdd.repartition(partitions.get)
     else vcRdd.rdd
 
-    val genodata = rdd.mapPartitions((iterator) => {
+    val genodata: RDD[(Array[Byte], List[(String, Array[Byte])])] = rdd.mapPartitions((iterator) => {
       val genotypebaos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
       val genotypeEncoder = EncoderFactory.get().binaryEncoder(genotypebaos, null)
 
@@ -340,9 +421,30 @@ object HBaseFunctions {
       genotypesForHbase
     })
 
+    dao.hbaseBulkLoad(genodata, hbaseTableName, stagingFolder)
+
+    val bulkLoadFlatMap = (t: (Array[Byte], List[(String, Array[Byte])])) => {
+      val data = new ListBuffer[(KeyFamilyQualifier, Array[Byte])]
+      val rowKey = t._1
+      val family = Bytes.toBytes("g")
+      t._2.foreach((x) => {
+        val qualifier: String = x._1
+        val value: Array[Byte] = x._2
+        val mykeyFamilyQualifier = new KeyFamilyQualifier(rowKey, family, Bytes.toBytes(qualifier))
+        data += Tuple2(mykeyFamilyQualifier, value)
+      })
+
+      data.iterator
+    }
+
+    dao.hbaseBulkLoad2(genodata,
+      hbaseTableName,
+      bulkLoadFlatMap,
+      stagingFolder)
+
+    /*
     val familyHBaseWriterOptions = new java.util.HashMap[Array[Byte], FamilyHFileWriteOptions]
     val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
-
     familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
 
     genodata.hbaseBulkLoad(conn.hbaseContext,
@@ -371,7 +473,7 @@ object HBaseFunctions {
     ("hadoop fs -chmod -R 777 " + stagingFolder) !
     val load = new LoadIncrementalHFiles(conn.conf)
     load.doBulkLoad(new Path(stagingFolder), conn.admin, conn.connection.getTable(TableName.valueOf(hbaseTableName)), conn.connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
-
+    */
   }
 
   def deleteGenotypeSamplesFromHBase(conn: ADAMHBaseConnection,
