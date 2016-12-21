@@ -279,7 +279,7 @@ object HBaseFunctions {
 
     //val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = conn.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
     val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = dao.getHBaseRDD(TableName.valueOf(hbaseTableName), scan)
-
+    //println("resultHbaseRDD: " + resultHBaseRDD)
     val resultHBaseRDDrepar = if (partitions.isDefined) resultHBaseRDD.repartition(partitions.get)
     else resultHBaseRDD
 
