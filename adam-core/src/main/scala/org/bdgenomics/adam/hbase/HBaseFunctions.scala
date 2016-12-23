@@ -50,6 +50,19 @@ import scala.collection.JavaConverters._
 
 object HBaseFunctions {
 
+  /**
+   * HBase Spark Data Access Object
+   *
+   * In standard usage user will create a single instance of this bject, and pass it as the first parameter
+   * when using the HBaseFunctions public API functions
+   *
+   * @param sc SparkContext
+   * @param inConf optional HBase Configuration parameter, only use if manually configuring HBase connection
+   * @param inConnection optional HBase Connection parameter, only use if manually configuring HBase connection
+   * @param inAdmin optional HBase Admin parameter, only use if manually configuring HBase connection
+   * @param inHBaseContext optional HBaseContext parameter, only use if manually configuring HBase connection
+   */
+
   class HBaseSparkDAO(sc: SparkContext,
                       inConf: Option[Configuration] = None,
                       inConnection: Option[Connection] = None,
@@ -89,7 +102,8 @@ object HBaseFunctions {
 
       ("hadoop fs -chmod -R 777 " + stagingFolder) !
       val load = new LoadIncrementalHFiles(conf)
-      load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)), connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
+      load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)),
+        connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
 
     }
 
@@ -97,22 +111,12 @@ object HBaseFunctions {
 
   }
 
-  /*
-  // Providing only SparkContext means default Hbase configuration will be used
-  class ADAMHBaseConnection(sc: SparkContext, inConf: Option[Configuration] = None, inConnection: Option[Connection] = None, inAdmin: Option[Admin] = None, inHBaseContext: Option[HBaseContext] = None) {
-    val conf = if (inConf.isDefined) inConf.get else HBaseConfiguration.create()
-    val connection = if (inConnection.isDefined) inConnection.get else ConnectionFactory.createConnection(conf)
-    val admin = if (inAdmin.isDefined) inAdmin.get else connection.getAdmin
-    val hbaseContext = if (inHBaseContext.isDefined) inHBaseContext.get else new HBaseContext(sc, conf)
-  }
-
-  /*
-  private[hbase] def checkHbaseConnection: Boolean = {
-    conf.isDefined && connection.isDefined && admin.isDefined && hbaseContext.isDefined
-  }
-  */
-  * */
-
+  /**
+   * KeyStrategy abstract class
+   *
+   * @tparam T Type of rowKeyInfo class which is container for data needed to construct a row key
+   * @tparam U Type of rangePrefixInfo class which is a container for the data needed to define a key range
+   */
   private[hbase] abstract class KeyStrategy[T, U] {
     def getKey(rowKeyInfo: T): Array[Byte]
     def getKeyRangePrefix(rangePrefixInfo: U): (Array[Byte], Array[Byte])
@@ -249,6 +253,17 @@ object HBaseFunctions {
 
   }
 
+  /**
+   *
+   * @param dao HBase Data Access Object
+   * @param hbaseTableName HBase Table Name
+   * @param sampleIds Sample Id list
+   * @param sampleListFile File containing sample IDs, one per line
+   * @param queryRegion Genomic ReferenceRegion used to limit query
+   * @param partitions number of partitions in which to repartition RDD
+   * @return
+   */
+
   private[hbase] def loadVariantContextsFromHBase(dao: HBaseSparkDAO,
                                                   hbaseTableName: String,
                                                   sampleIds: Option[List[String]] = None,
@@ -279,17 +294,16 @@ object HBaseFunctions {
         sampleIds.get
       }
 
-    //val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = conn.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
     val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = dao.getHBaseRDD(TableName.valueOf(hbaseTableName), scan)
-    //println("resultHbaseRDD: " + resultHBaseRDD)
     val resultHBaseRDDrepar = if (partitions.isDefined) resultHBaseRDD.repartition(partitions.get)
     else resultHBaseRDD
 
     val result: RDD[VariantContext] = resultHBaseRDDrepar.mapPartitions((iterator) => {
 
-      val genotypeDatumReader: DatumReader[Genotype] = new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
-        .runtimeClass
-        .asInstanceOf[Class[Genotype]])
+      val genotypeDatumReader: DatumReader[Genotype] =
+        new SpecificDatumReader[Genotype](scala.reflect.classTag[Genotype]
+          .runtimeClass
+          .asInstanceOf[Class[Genotype]])
 
       iterator.map((curr) => {
         var resultList = new ListBuffer[Genotype]
@@ -317,7 +331,13 @@ object HBaseFunctions {
     result
   }
 
-  /// Begin public API
+  /**
+   *
+   * @param dao HBase Data Access Object
+   * @param hbaseTableName HBase Table Name
+   * @param splitsFileName File path and name for file with pre-defined splits of HBase key space
+   */
+
   def createHBaseGenotypeTable(dao: HBaseSparkDAO, hbaseTableName: String, splitsFileName: Option[String] = None) {
 
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
@@ -329,7 +349,7 @@ object HBaseFunctions {
       val splits: Array[Array[Byte]] = Source.fromFile(splitsFileName.get).getLines.toArray
         .map(x => x.split(" "))
         .map(g => Bytes.toBytes(g(0) + "_"
-          + String.format("%10s", g(1).toString).replace(' ', '0')))
+          + String.format("%10s", g(1)).replace(' ', '0')))
 
       dao.admin.createTable(tableDescriptor, splits)
     } else dao.admin.createTable(tableDescriptor)
@@ -344,6 +364,18 @@ object HBaseFunctions {
     dao.admin.createTable(tableDescriptorMeta)
   }
 
+  /**
+   *
+   * @param dao HBase Data Access Object
+   * @param vcRdd VariantContextRDD from which to save data to HBase
+   * @param hbaseTableName HBase table name
+   * @param sequenceDictionaryId user defined sequence Dionctionary Id to use when saving
+   * @param saveSequenceDictionary toggle saving of Sequence Dictioanry, set to false when relevant Sequence
+   *                               Dictionary has already been saved to HBase in a previous load operation
+   * @param partitions - number N of partitions in which to repartition data, if not defined data is not repartitioned
+   * @param stagingFolder - user defined location (on HDFS) to which to save temporary staging files
+   */
+
   def saveVariantContextRDDToHBaseBulk(dao: HBaseSparkDAO,
                                        vcRdd: VariantContextRDD,
                                        hbaseTableName: String,
@@ -354,7 +386,10 @@ object HBaseFunctions {
 
     saveSampleMetadataToHBase(dao, hbaseTableName + "_meta", vcRdd.samples)
 
-    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(dao, hbaseTableName + "_meta", vcRdd.sequences, sequenceDictionaryId)
+    if (saveSequenceDictionary) saveSequenceDictionaryToHBase(dao,
+      hbaseTableName + "_meta",
+      vcRdd.sequences,
+      sequenceDictionaryId)
 
     val rdd = if (partitions.isDefined) vcRdd.rdd.repartition(partitions.get)
     else vcRdd.rdd
@@ -409,11 +444,20 @@ object HBaseFunctions {
       stagingFolder)
   }
 
+  /**
+   *
+   * @param dao HBase Data Access Object
+   * @param hbaseTableName HBase table name
+   * @param sampleIds List of sample ids
+   * @param sampleListFile File containing one sample id per row
+   * @param partitions number of paritions to use when performing bulk delete
+   */
+
   def deleteGenotypeSamplesFromHBase(dao: HBaseSparkDAO,
                                      hbaseTableName: String,
                                      sampleIds: Option[List[String]] = None,
                                      sampleListFile: Option[String] = None,
-                                     partitions: Option[Int] = None): Unit = {
+                                     partitions: Option[Int] = Some(1)): Unit = {
 
     val scan = new Scan()
     scan.setCaching(100)
@@ -429,7 +473,8 @@ object HBaseFunctions {
         sampleIds.get
       }
 
-    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = dao.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] =
+      dao.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
     dao.hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)](resultHBaseRDD,
       TableName.valueOf(hbaseTableName),
@@ -440,7 +485,7 @@ object HBaseFunctions {
         })
         currDelete
       },
-      4)
+      partitions.get)
   }
 
   /**
@@ -450,8 +495,8 @@ object HBaseFunctions {
    * @param hbaseTableName HBase table name
    * @param sampleIds List of sample ids
    * @param sequenceDictionaryId Id of sequenceDictionary that was saved along with genotype data to HBase
-   * @param queryRegion ReferenceRegion used to limit query
-   * @param partitions number of paritions to repartition RDD into
+   * @param queryRegion Genomic ReferenceRegion used to limit query
+   * @param partitions number of partitions in which to repartition RDD
    * @return
    */
 
