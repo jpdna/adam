@@ -441,6 +441,17 @@ object HBaseFunctions {
       4)
   }
 
+  /** Load VariantContextRDD from Genotype data in HBase
+    *
+    * @param dao HBase Data Access Object
+    * @param hbaseTableName HBase table name
+    * @param sampleIds List of sample ids
+    * @param sequenceDictionaryId Id of sequenceDictionary that was saved along with genotype data to HBase
+    * @param queryRegion ReferenceRegion used to limit query
+    * @param partitions number of paritions to repartition RDD into
+    * @return
+    */
+
   def loadGenotypesFromHBaseToVariantContextRDD(dao: HBaseSparkDAO,
                                                 hbaseTableName: String,
                                                 sampleIds: List[String],
