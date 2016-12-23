@@ -97,6 +97,7 @@ object HBaseFunctions {
 
   }
 
+  /*
   // Providing only SparkContext means default Hbase configuration will be used
   class ADAMHBaseConnection(sc: SparkContext, inConf: Option[Configuration] = None, inConnection: Option[Connection] = None, inAdmin: Option[Admin] = None, inHBaseContext: Option[HBaseContext] = None) {
     val conf = if (inConf.isDefined) inConf.get else HBaseConfiguration.create()
@@ -110,6 +111,7 @@ object HBaseFunctions {
     conf.isDefined && connection.isDefined && admin.isDefined && hbaseContext.isDefined
   }
   */
+  * */
 
   private[hbase] abstract class KeyStrategy[T, U] {
     def getKey(rowKeyInfo: T): Array[Byte]
@@ -316,7 +318,7 @@ object HBaseFunctions {
   }
 
   /// Begin public API
-  def createHBaseGenotypeTable(conn: ADAMHBaseConnection, hbaseTableName: String, splitsFileName: Option[String] = None) {
+  def createHBaseGenotypeTable(dao: HBaseSparkDAO, hbaseTableName: String, splitsFileName: Option[String] = None) {
 
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(hbaseTableName))
     tableDescriptor.addFamily(new HColumnDescriptor("g".getBytes()).setCompressionType(Algorithm.GZ)
@@ -329,8 +331,8 @@ object HBaseFunctions {
         .map(g => Bytes.toBytes(g(0) + "_"
           + String.format("%10s", g(1).toString).replace(' ', '0')))
 
-      conn.admin.createTable(tableDescriptor, splits)
-    } else conn.admin.createTable(tableDescriptor)
+      dao.admin.createTable(tableDescriptor, splits)
+    } else dao.admin.createTable(tableDescriptor)
 
     val hbaseTableNameMeta = hbaseTableName + "_meta"
 
@@ -339,7 +341,7 @@ object HBaseFunctions {
       .setCompressionType(Algorithm.GZ)
       .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
       .setMaxVersions(1))
-    conn.admin.createTable(tableDescriptorMeta)
+    dao.admin.createTable(tableDescriptorMeta)
   }
 
   def saveVariantContextRDDToHBaseBulk(dao: HBaseSparkDAO,
@@ -407,7 +409,7 @@ object HBaseFunctions {
       stagingFolder)
   }
 
-  def deleteGenotypeSamplesFromHBase(conn: ADAMHBaseConnection,
+  def deleteGenotypeSamplesFromHBase(dao: HBaseSparkDAO,
                                      hbaseTableName: String,
                                      sampleIds: Option[List[String]] = None,
                                      sampleListFile: Option[String] = None,
@@ -427,9 +429,9 @@ object HBaseFunctions {
         sampleIds.get
       }
 
-    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = conn.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
+    val resultHBaseRDD: RDD[(ImmutableBytesWritable, Result)] = dao.hbaseContext.hbaseRDD(TableName.valueOf(hbaseTableName), scan)
 
-    conn.hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)](resultHBaseRDD,
+    dao.hbaseContext.bulkDelete[(ImmutableBytesWritable, Result)](resultHBaseRDD,
       TableName.valueOf(hbaseTableName),
       putRecord => {
         val currDelete = new Delete(putRecord._2.getRow)
@@ -441,16 +443,17 @@ object HBaseFunctions {
       4)
   }
 
-  /** Load VariantContextRDD from Genotype data in HBase
-    *
-    * @param dao HBase Data Access Object
-    * @param hbaseTableName HBase table name
-    * @param sampleIds List of sample ids
-    * @param sequenceDictionaryId Id of sequenceDictionary that was saved along with genotype data to HBase
-    * @param queryRegion ReferenceRegion used to limit query
-    * @param partitions number of paritions to repartition RDD into
-    * @return
-    */
+  /**
+   * Load VariantContextRDD from Genotype data in HBase
+   *
+   * @param dao HBase Data Access Object
+   * @param hbaseTableName HBase table name
+   * @param sampleIds List of sample ids
+   * @param sequenceDictionaryId Id of sequenceDictionary that was saved along with genotype data to HBase
+   * @param queryRegion ReferenceRegion used to limit query
+   * @param partitions number of paritions to repartition RDD into
+   * @return
+   */
 
   def loadGenotypesFromHBaseToVariantContextRDD(dao: HBaseSparkDAO,
                                                 hbaseTableName: String,
