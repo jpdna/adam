@@ -12,7 +12,7 @@ import org.apache.hadoop.hbase.client.Result
 import org.apache.hadoop.hbase.client._
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.VariantContext
-import org.bdgenomics.formats.avro.Genotype
+import org.bdgenomics.formats.avro.{ Genotype, GenotypeAllele }
 import org.bdgenomics.adam.rdd.ADAMContext._
 
 /**
@@ -48,7 +48,7 @@ class HBaseSuite extends ADAMFunSuite {
     val genoResult2 = genodataCaptor.getValue.take(1)(0)._2.head
 
     val correctResult1: Array[Byte] = Array(49, 95, 48, 48, 48, 48, 48, 49, 52, 51, 57, 54, 95, 67, 84, 71, 84, 95, 67, 95, 52)
-    
+
     val correctResult2: (String, Array[Byte]) = ("NA12878", Array(2, 2, -106, 2, 0, 0, 0, 2, 8, 67, 84, 71, 84, 2, 2,
       67, 0, 0, 0, 2, 2, 49, 2, -8, -32, 1, 2, -128, -31, 1, 2, 2, 0, 2, 14, 73, 110, 100, 101, 108, 81, 68, 0, 0, 0,
       2, -23, 38, -7, 64, 2, 82, -72, -42, 65, 2, 0, 2, -49, -9, -13, -65, 2, -90, -101, -60, 62, 0, 0, 0, 0, 0, 2, 14,
@@ -91,11 +91,14 @@ class HBaseSuite extends ADAMFunSuite {
 
     val samples = List("NA12878")
 
-    val genoData: Genotype = HBaseFunctions.loadVariantContextsFromHBase(dao, "myTable", Some(samples))
-      .take(1)(0).genotypes.toList.head
+    val genoData: Genotype = HBaseFunctions.loadVariantContextsFromHBase(dao, "myTable", Some(samples)).take(1)(0).genotypes.toList.head
 
     assert(genoData.getSampleId === "NA12878")
-
+    assert(genoData.getContigName === "1")
+    assert(genoData.getStart === 14396)
+    assert(genoData.getEnd === 14400)
+    assert(genoData.getAlleles.get(0) === GenotypeAllele.Ref)
+    assert(genoData.getAlleles.get(1) === GenotypeAllele.Alt)
   }
 
   sparkAfter("Done with HBase Tests") {

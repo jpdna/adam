@@ -129,22 +129,22 @@ object HBaseFunctions {
                                                    altAllele: String)
 
   /**
-    * KeyStrategy1RangePrefixInfo contains a ReferenceRegion used to define a key range prefix in
-    * Keystrategy1
-    *
-    * @param queryRegion
-    */
+   * KeyStrategy1RangePrefixInfo contains a ReferenceRegion used to define a key range prefix in
+   * Keystrategy1
+   *
+   * @param queryRegion
+   */
   private[hbase] case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
 
   /**
-    * KeyStrategy1  implements a HBase row key design consisting of underscore seperated fields:
-    *   contigName
-    *   start
-    *   refAlleel
-    *   AltAllele
-    *   length
-    *
-    */
+   * KeyStrategy1  implements a HBase row key design consisting of underscore seperated fields:
+   *   contigName
+   *   start
+   *   refAlleel
+   *   AltAllele
+   *   length
+   *
+   */
 
   private[hbase] object KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
     def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = {
@@ -165,13 +165,13 @@ object HBaseFunctions {
   }
 
   /**
-    * saves Sequence Dictionary data to HBase
-    *
-    * @param dao
-    * @param hbaseTableName
-    * @param sequences
-    * @param sequenceDictionaryId
-    */
+   * saves Sequence Dictionary data to HBase
+   *
+   * @param dao
+   * @param hbaseTableName
+   * @param sequences
+   * @param sequenceDictionaryId
+   */
 
   private[hbase] def saveSequenceDictionaryToHBase(dao: HBaseSparkDAO,
                                                    hbaseTableName: String,
@@ -199,13 +199,13 @@ object HBaseFunctions {
   }
 
   /**
-    * loads Sequence Dictionary data from HBase
-    *
-    * @param dao
-    * @param HbaseTableName
-    * @param sequenceDictionaryId
-    * @return
-    */
+   * loads Sequence Dictionary data from HBase
+   *
+   * @param dao
+   * @param HbaseTableName
+   * @param sequenceDictionaryId
+   * @return
+   */
 
   private[hbase] def loadSequenceDictionaryFromHBase(dao: HBaseSparkDAO,
                                                      HbaseTableName: String,
@@ -233,12 +233,12 @@ object HBaseFunctions {
   }
 
   /**
-    * save Sample Metadata to HBase
-    *
-    * @param dao
-    * @param hbaseTableName
-    * @param samples
-    */
+   * save Sample Metadata to HBase
+   *
+   * @param dao
+   * @param hbaseTableName
+   * @param samples
+   */
 
   private[hbase] def saveSampleMetadataToHBase(dao: HBaseSparkDAO,
                                                hbaseTableName: String,
@@ -266,13 +266,13 @@ object HBaseFunctions {
   }
 
   /**
-    * load sample Metadata from HBase
-    *
-    * @param dao
-    * @param hbaseTableName
-    * @param sampleIds
-    * @return
-    */
+   * load sample Metadata from HBase
+   *
+   * @param dao
+   * @param hbaseTableName
+   * @param sampleIds
+   * @return
+   */
   private[hbase] def loadSampleMetadataFromHBase(dao: HBaseSparkDAO,
                                                  hbaseTableName: String,
                                                  sampleIds: List[String]): Seq[Sample] = {
@@ -314,12 +314,12 @@ object HBaseFunctions {
    * @return
    */
 
-  private[hbase] def loadVariantContextsFromHBase(dao: HBaseSparkDAO,
-                                                  hbaseTableName: String,
-                                                  sampleIds: Option[List[String]] = None,
-                                                  sampleListFile: Option[String] = None,
-                                                  queryRegion: Option[ReferenceRegion] = None,
-                                                  partitions: Option[Int] = None): RDD[VariantContext] = {
+  def loadVariantContextsFromHBase(dao: HBaseSparkDAO,
+                                   hbaseTableName: String,
+                                   sampleIds: Option[List[String]] = None,
+                                   sampleListFile: Option[String] = None,
+                                   queryRegion: Option[ReferenceRegion] = None,
+                                   partitions: Option[Int] = None): RDD[VariantContext] = {
 
     val scan = new Scan()
     scan.setCaching(100)
