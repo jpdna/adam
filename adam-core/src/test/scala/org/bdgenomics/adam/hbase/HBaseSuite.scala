@@ -37,7 +37,7 @@ class HBaseSuite extends ADAMFunSuite {
     val flatMapCaptor = ArgumentCaptor.forClass(classOf[scala.Function1[(Array[Byte], List[(String, Array[Byte])]), scala.Iterator[scala.Tuple2[org.apache.hadoop.hbase.spark.KeyFamilyQualifier, scala.Array[scala.Byte]]]]])
     val stagingFolderCaptor = ArgumentCaptor.forClass(classOf[String])
 
-    HBaseFunctions.saveVariantContextRDDToHBaseBulk(dao, inputVariantContext, "mytable1", "mySeqDict", true, None, "mystagingfolder")
+    HBaseFunctions.saveVariantContextRDDToHBaseBulk(dao, inputVariantContext, "mytable1", "mySeqDict", "myStagingFolder", true, None)
 
     verify(dao).hbaseBulkLoad(genodataCaptor.capture(),
       hbaseTableNameCaptor.capture(),

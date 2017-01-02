@@ -17,36 +17,43 @@
  */
 package org.bdgenomics.adam.hbase
 
-import java.util
-
+import java.io.ByteArrayOutputStream
+import org.apache.avro.specific.SpecificDatumWriter
+import org.apache.avro.io.EncoderFactory
+import org.apache.avro.io.DecoderFactory
+import org.apache.avro.io.DatumReader
+import org.apache.avro.io.DatumWriter
+import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.hadoop.hbase.client._
+import org.apache.hadoop.hbase.client.Connection
+import org.apache.hadoop.hbase.client.Admin
+import org.apache.hadoop.hbase.client.ConnectionFactory
+import org.apache.hadoop.hbase.client.Delete
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.client.Scan
+import org.apache.hadoop.hbase.client.Get
+import org.apache.hadoop.hbase.client.Table
+import org.apache.hadoop.hbase.client.Result
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.spark._
-import org.bdgenomics.adam.rdd.variation.{ VariantContextRDD }
-import org.bdgenomics.adam.rich.RichVariant
-import org.bdgenomics.formats.avro._
 import org.apache.hadoop.hbase.spark.HBaseRDDFunctions._
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
-import org.apache.avro.specific.SpecificDatumWriter
-import org.apache.avro.io._
-import java.io.ByteArrayOutputStream
-
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm
-import org.apache.avro.specific.SpecificDatumReader
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles
 import org.apache.hadoop.fs.{ FSDataInputStream, FileSystem, Path }
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.bdgenomics.adam.rdd.variation.{ VariantContextRDD }
+import org.bdgenomics.adam.rich.RichVariant
+import org.bdgenomics.formats.avro._
 import org.bdgenomics.adam.models.{ ReferencePosition, ReferenceRegion, SequenceDictionary, VariantContext }
-
 import scala.io.Source
 import scala.collection.mutable.ListBuffer
-import sys.process._
 import scala.collection.JavaConverters._
+import sys.process._
 
 object HBaseFunctions {
 
@@ -100,7 +107,9 @@ object HBaseFunctions {
         compactionExclude = false,
         HConstants.DEFAULT_MAX_FILE_SIZE)
 
-      ("hadoop fs -chmod -R 777 " + stagingFolder) !
+      // This permission change appears necessary, plan to revist to find better way
+      ("hadoop fs -chmod -R 660 " + stagingFolder) !
+
       val load = new LoadIncrementalHFiles(conf)
       load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)),
         connection.getRegionLocator(TableName.valueOf(hbaseTableName)))
@@ -275,15 +284,15 @@ object HBaseFunctions {
    */
   private[hbase] def loadSampleMetadataFromHBase(dao: HBaseSparkDAO,
                                                  hbaseTableName: String,
-                                                 sampleIds: List[String]): Seq[Sample] = {
+                                                 sampleIds: Seq[String]): Seq[Sample] = {
 
     val table = dao.getTable(TableName.valueOf(hbaseTableName))
 
     var resultList = new ListBuffer[Sample]
 
     sampleIds.foreach((sampleId) => {
-      val myGet = new Get(Bytes.toBytes(sampleId))
-      val result = table.get(myGet)
+      val get = new Get(Bytes.toBytes(sampleId))
+      val result = table.get(get)
       val dataBytes = result.getValue(Bytes.toBytes("meta"), Bytes.toBytes("sampledata"))
 
       val sampleDatumReader: DatumReader[Sample] =
@@ -298,9 +307,7 @@ object HBaseFunctions {
       }
 
     })
-
     resultList
-
   }
 
   /**
@@ -314,15 +321,17 @@ object HBaseFunctions {
    * @return
    */
 
-  def loadVariantContextsFromHBase(dao: HBaseSparkDAO,
-                                   hbaseTableName: String,
-                                   sampleIds: Option[List[String]] = None,
-                                   sampleListFile: Option[String] = None,
-                                   queryRegion: Option[ReferenceRegion] = None,
-                                   partitions: Option[Int] = None): RDD[VariantContext] = {
+  private[hbase] def loadVariantContextsFromHBase(dao: HBaseSparkDAO,
+                                                  hbaseTableName: String,
+                                                  sampleIds: Option[List[String]] = None,
+                                                  sampleListFile: Option[String] = None,
+                                                  queryRegion: Option[ReferenceRegion] = None,
+                                                  partitions: Option[Int] = None,
+                                                  cachingValue: Int = 100): RDD[VariantContext] = {
 
     val scan = new Scan()
-    scan.setCaching(100)
+
+    scan.setCaching(cachingValue)
     scan.setMaxVersions(1)
 
     queryRegion.foreach { (currQueryRegion) =>
@@ -356,17 +365,17 @@ object HBaseFunctions {
           .asInstanceOf[Class[Genotype]])
 
       iterator.map((curr) => {
-        var resultList = new ListBuffer[Genotype]
+        var result = new ListBuffer[Genotype]
         sampleIdsFinal.foreach((sample) => {
           val sampleVal = curr._2.getColumnCells(Bytes.toBytes("g"), Bytes.toBytes(sample))
           val decoder = DecoderFactory.get().binaryDecoder(CellUtil.cloneValue(sampleVal.get(0)), null)
           while (!decoder.isEnd) {
-            resultList += genotypeDatumReader.read(null, decoder)
+            result += genotypeDatumReader.read(null, decoder)
           }
         })
 
-        resultList
-        val x = resultList.toList
+        result
+        val x = result.toList
 
         val firstGenotype: Genotype = x.head
         val currVar: RichVariant = RichVariant.genotypeToRichVariant(firstGenotype)
@@ -396,6 +405,9 @@ object HBaseFunctions {
       .setMaxVersions(1))
 
     if (splitsFileName.isDefined) {
+
+      // splits defines a set of redefined HBase region splits based on an array of Array[Byte] indicating the
+      // split points
       val splits: Array[Array[Byte]] = Source.fromFile(splitsFileName.get).getLines.toArray
         .map(x => x.split(" "))
         .map(g => Bytes.toBytes(g(0) + "_"
@@ -430,9 +442,9 @@ object HBaseFunctions {
                                        vcRdd: VariantContextRDD,
                                        hbaseTableName: String,
                                        sequenceDictionaryId: String,
+                                       stagingFolder: String,
                                        saveSequenceDictionary: Boolean = true,
-                                       partitions: Option[Int] = None,
-                                       stagingFolder: String): Unit = {
+                                       partitions: Option[Int] = None) = {
 
     saveSampleMetadataToHBase(dao, hbaseTableName + "_meta", vcRdd.samples)
 
@@ -550,12 +562,12 @@ object HBaseFunctions {
    * @return
    */
 
-  def loadGenotypesFromHBaseToVariantContextRDD(dao: HBaseSparkDAO,
-                                                hbaseTableName: String,
-                                                sampleIds: List[String],
-                                                sequenceDictionaryId: String,
-                                                queryRegion: Option[ReferenceRegion] = None, //one-based
-                                                partitions: Option[Int] = None): VariantContextRDD = {
+  def loadGenotypesFromHBase(dao: HBaseSparkDAO,
+                             hbaseTableName: String,
+                             sampleIds: List[String],
+                             sequenceDictionaryId: String,
+                             queryRegion: Option[ReferenceRegion] = None, //one-based
+                             partitions: Option[Int] = None): VariantContextRDD = {
 
     val sequenceDictionary = loadSequenceDictionaryFromHBase(dao, hbaseTableName + "_meta", sequenceDictionaryId)
     val sampleMetadata = loadSampleMetadataFromHBase(dao, hbaseTableName + "_meta", sampleIds)

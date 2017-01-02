@@ -46,7 +46,7 @@ class Vcf2HBaseArgs extends Args4jBase {
   @Argument(required = true, metaVar = "VCF", usage = "The VCF file to convert", index = 0)
   var vcfPath: String = _
 
-  @Args4jOption(required = true, name = "-hbase_table", usage = "HBase table name in which to load VCF file")
+  @Argument(required = true, metaVar = "-hbase_table", usage = "HBase table name in which to load VCF file")
   var hbaseTable: String = null
 
   @Args4jOption(required = true, name = "-seq_dict_id", usage = "User defined name to apply to the sequence dictionary create from this VCF, or name of existing sequence dictionary to be used")
@@ -58,7 +58,7 @@ class Vcf2HBaseArgs extends Args4jBase {
   @Args4jOption(required = false, name = "-repartition", usage = "Repartition into N partitions prior to writing to HBase")
   var repartitionNum: Int = 0
 
-  @Args4jOption(required = true, name = "-staging_folder", usage = "Location for temporary files during bulk load")
+  @Argument(required = true, metaVar = "-staging_folder", usage = "Location for temporary files during bulk load")
   var stagingFolder: String = null
 
 }
@@ -75,9 +75,9 @@ class Vcf2HBase(protected val args: Vcf2HBaseArgs) extends BDGSparkCommand[Vcf2H
       vcRdd,
       args.hbaseTable,
       args.seqDictId,
-      true,
-      Some(args.repartitionNum),
-      args.stagingFolder)
+      args.stagingFolder,
+      args.useExistingSeqDict,
+      Some(args.repartitionNum))
 
   }
 
