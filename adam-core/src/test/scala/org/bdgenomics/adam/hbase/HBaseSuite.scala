@@ -20,10 +20,10 @@ import org.bdgenomics.adam.rdd.ADAMContext._
  */
 class HBaseSuite extends ADAMFunSuite {
 
-  sparkBefore("Create HBase test database") {
+  sparkBefore("Start HBase tests") {
   }
 
-  sparkTest("Save data from a VCF into HBase") {
+  sparkTest("Save data from a VCF into HBase using KeyStrategy1") {
 
     val inputVariantContext = sc.loadVcf(testFile("small.vcf"))
 
@@ -48,6 +48,7 @@ class HBaseSuite extends ADAMFunSuite {
     val genoResult2 = genodataCaptor.getValue.take(1)(0)._2.head
 
     val correctResult1: Array[Byte] = Array(49, 95, 48, 48, 48, 48, 48, 49, 52, 51, 57, 54, 95, 67, 84, 71, 84, 95, 67, 95, 52)
+    
     val correctResult2: (String, Array[Byte]) = ("NA12878", Array(2, 2, -106, 2, 0, 0, 0, 2, 8, 67, 84, 71, 84, 2, 2,
       67, 0, 0, 0, 2, 2, 49, 2, -8, -32, 1, 2, -128, -31, 1, 2, 2, 0, 2, 14, 73, 110, 100, 101, 108, 81, 68, 0, 0, 0,
       2, -23, 38, -7, 64, 2, 82, -72, -42, 65, 2, 0, 2, -49, -9, -13, -65, 2, -90, -101, -60, 62, 0, 0, 0, 0, 0, 2, 14,
@@ -86,8 +87,6 @@ class HBaseSuite extends ADAMFunSuite {
     scan.setCaching(100)
     scan.setMaxVersions(1)
 
-    println("loadHBaseRDD: " + loadHBaseRDD)
-
     when(dao.getHBaseRDD(Matchers.anyObject(), Matchers.anyObject())).thenReturn(loadHBaseRDD)
 
     val samples = List("NA12878")
@@ -99,9 +98,7 @@ class HBaseSuite extends ADAMFunSuite {
 
   }
 
-  sparkTest("Read data from HBase into VariantContextRDD and convert to GentypeRDD") {}
-
-  sparkAfter("Delete HBase test database") {
+  sparkAfter("Done with HBase Tests") {
   }
 
 }

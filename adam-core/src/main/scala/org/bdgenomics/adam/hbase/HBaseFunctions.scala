@@ -53,14 +53,14 @@ object HBaseFunctions {
   /**
    * HBase Spark Data Access Object
    *
-   * In standard usage user will create a single instance of this bject, and pass it as the first parameter
+   * In standard usage user will create a single instance of this object, and pass it as the first parameter
    * when using the HBaseFunctions public API functions
    *
    * @param sc SparkContext
-   * @param inConf optional HBase Configuration parameter, only use if manually configuring HBase connection
-   * @param inConnection optional HBase Connection parameter, only use if manually configuring HBase connection
-   * @param inAdmin optional HBase Admin parameter, only use if manually configuring HBase connection
-   * @param inHBaseContext optional HBaseContext parameter, only use if manually configuring HBase connection
+   * @param inConf optional HBase Configuration parameter, only used if manually configuring HBase connection
+   * @param inConnection optional HBase Connection parameter, only used if manually configuring HBase connection
+   * @param inAdmin optional HBase Admin parameter, only used if manually configuring HBase connection
+   * @param inHBaseContext optional HBaseContext parameter, only used if manually configuring HBase connection
    */
 
   class HBaseSparkDAO(sc: SparkContext,
@@ -128,7 +128,23 @@ object HBaseFunctions {
                                                    refAllele: String,
                                                    altAllele: String)
 
+  /**
+    * KeyStrategy1RangePrefixInfo contains a ReferenceRegion used to define a key range prefix in
+    * Keystrategy1
+    *
+    * @param queryRegion
+    */
   private[hbase] case class KeyStrategy1RangePrefixInfo(queryRegion: ReferenceRegion)
+
+  /**
+    * KeyStrategy1  implements a HBase row key design consisting of underscore seperated fields:
+    *   contigName
+    *   start
+    *   refAlleel
+    *   AltAllele
+    *   length
+    *
+    */
 
   private[hbase] object KeyStrategy1 extends KeyStrategy[KeyStrategy1rowKeyInfo, KeyStrategy1RangePrefixInfo] {
     def getKey(rowKeyInfo: KeyStrategy1rowKeyInfo): Array[Byte] = {
@@ -147,6 +163,15 @@ object HBaseFunctions {
       (start, stop)
     }
   }
+
+  /**
+    * saves Sequence Dictionary data to HBase
+    *
+    * @param dao
+    * @param hbaseTableName
+    * @param sequences
+    * @param sequenceDictionaryId
+    */
 
   private[hbase] def saveSequenceDictionaryToHBase(dao: HBaseSparkDAO,
                                                    hbaseTableName: String,
@@ -173,6 +198,15 @@ object HBaseFunctions {
     table.put(put)
   }
 
+  /**
+    * loads Sequence Dictionary data from HBase
+    *
+    * @param dao
+    * @param HbaseTableName
+    * @param sequenceDictionaryId
+    * @return
+    */
+
   private[hbase] def loadSequenceDictionaryFromHBase(dao: HBaseSparkDAO,
                                                      HbaseTableName: String,
                                                      sequenceDictionaryId: String): SequenceDictionary = {
@@ -197,6 +231,14 @@ object HBaseFunctions {
     SequenceDictionary.fromAvro(resultList)
 
   }
+
+  /**
+    * save Sample Metadata to HBase
+    *
+    * @param dao
+    * @param hbaseTableName
+    * @param samples
+    */
 
   private[hbase] def saveSampleMetadataToHBase(dao: HBaseSparkDAO,
                                                hbaseTableName: String,
@@ -223,6 +265,14 @@ object HBaseFunctions {
     })
   }
 
+  /**
+    * load sample Metadata from HBase
+    *
+    * @param dao
+    * @param hbaseTableName
+    * @param sampleIds
+    * @return
+    */
   private[hbase] def loadSampleMetadataFromHBase(dao: HBaseSparkDAO,
                                                  hbaseTableName: String,
                                                  sampleIds: List[String]): Seq[Sample] = {
