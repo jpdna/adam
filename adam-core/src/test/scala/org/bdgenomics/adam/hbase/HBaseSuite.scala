@@ -2,9 +2,8 @@ package org.bdgenomics.adam.hbase
 
 import org.bdgenomics.adam.util.ADAMFunSuite
 import org.apache.hadoop.hbase.{ HBaseConfiguration, TableName }
-import org.mockito.Mockito
+import org.mockito.{ ArgumentCaptor, Matchers, Mockito }
 import org.mockito.Mockito._
-import org.mockito.Matchers
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.Cell
@@ -14,24 +13,42 @@ import org.apache.hadoop.hbase.client._
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.VariantContext
 import org.bdgenomics.formats.avro.Genotype
+import org.bdgenomics.adam.rdd.ADAMContext._
 
 /**
  * Created by paschallj on 11/25/16.
  */
 class HBaseSuite extends ADAMFunSuite {
 
-  //val hbaseConn = new HBaseFunctions.ADAMHBaseConnection(sc)
-
   sparkBefore("Create HBase test database") {
-    //HBaseFunctions.createHBaseGenotypeTable(hbaseConn, "testADAM")
-
   }
 
   sparkTest("Save data from a VCF into HBase") {
 
+    val inputVariantContext = sc.loadVcf(testFile("small.vcf"))
+
+    val dao = Mockito.mock(classOf[HBaseFunctions.HBaseSparkDAO])
+
+    val mockTable = Mockito.mock(classOf[org.apache.hadoop.hbase.client.Table])
+    when(dao.getTable(Matchers.anyObject())).thenReturn(mockTable)
+
+    val genodataCaptor = ArgumentCaptor.forClass(classOf[RDD[(Array[Byte], List[(String, Array[Byte])])]])
+    val hbaseTableNameCaptor = ArgumentCaptor.forClass(classOf[String])
+    val flatMapCaptor = ArgumentCaptor.forClass(classOf[scala.Function1[(Array[Byte], List[(String, Array[Byte])]), scala.Iterator[scala.Tuple2[org.apache.hadoop.hbase.spark.KeyFamilyQualifier, scala.Array[scala.Byte]]]]])
+    val stagingFolderCaptor = ArgumentCaptor.forClass(classOf[String])
+
+    HBaseFunctions.saveVariantContextRDDToHBaseBulk(dao, inputVariantContext, "mytable1", "mySeqDict", true, None, "mystagingfolder")
+
+    verify(dao).hbaseBulkLoad(genodataCaptor.capture(),
+      hbaseTableNameCaptor.capture(),
+      flatMapCaptor.capture(),
+      stagingFolderCaptor.capture())
+
+    println("genodataCatpor: " + genodataCaptor.getValue.take(1))
+
   }
 
-  sparkTest("Load data from  HBase") {
+  sparkTest("Load data from  HBase using KeyStrategy1") {
 
     val dao = Mockito.mock(classOf[HBaseFunctions.HBaseSparkDAO])
 
@@ -58,37 +75,21 @@ class HBaseSuite extends ADAMFunSuite {
     scan.setMaxVersions(1)
 
     println("loadHBaseRDD: " + loadHBaseRDD)
-    //when(dao.getHBaseRDD(TableName.valueOf("myTable"), scan)).thenReturn(loadHBaseRDD)
+
     when(dao.getHBaseRDD(Matchers.anyObject(), Matchers.anyObject())).thenReturn(loadHBaseRDD)
 
     val samples = List("NA12878")
-    //val x = HBaseFunctions.loadGenotypesFromHBaseToVariantContextRDD(dao, "myTable", samples, "seqDictID" )
 
     val genoData: Genotype = HBaseFunctions.loadVariantContextsFromHBase(dao, "myTable", Some(samples))
       .take(1)(0).genotypes.toList.head
 
     assert(genoData.getSampleId === "NA12878")
 
-    /*
-    println("X: " + x)
-
-    val z: Array[VariantContext] = x.take(1)
-    val z2: VariantContext = z(0)
-
-    println("z: " + z)
-    println("z2: " + z2)
-    println("z2.variant: " + z2.variant)
-    println("z2: " + z2.genotypes.toList.head)
-
-    assert(x2.)
-*/
   }
 
   sparkTest("Read data from HBase into VariantContextRDD and convert to GentypeRDD") {}
 
   sparkAfter("Delete HBase test database") {
-    //hbaseConn.admin.disableTable(TableName.valueOf("testADAM"))
-    //hbaseConn.admin.deleteTable(TableName.valueOf("testADAM"))
   }
 
 }
