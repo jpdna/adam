@@ -99,6 +99,8 @@ object HBaseFunctions {
       val f1Options = new FamilyHFileWriteOptions("GZ", "ROW", 128, "FAST_DIFF")
       familyHBaseWriterOptions.put(Bytes.toBytes("g"), f1Options)
 
+      // call implicit RDD function hbaseBulkLoad to write bulk files to staging locations
+      // and then load to HBase
       genodata.hbaseBulkLoad(hbaseContext,
         TableName.valueOf(hbaseTableName),
         flatMap,
@@ -107,7 +109,7 @@ object HBaseFunctions {
         compactionExclude = false,
         HConstants.DEFAULT_MAX_FILE_SIZE)
 
-      // This permission change appears necessary, plan to revist to find better way
+      // This permission change appears necessary, plan to revisit to find better way
       ("hadoop fs -chmod -R 660 " + stagingFolder) !
 
       val load = new LoadIncrementalHFiles(conf)
@@ -187,15 +189,16 @@ object HBaseFunctions {
                                                    sequences: SequenceDictionary,
                                                    sequenceDictionaryId: String): Unit = {
 
-    val table: Table = dao.getTable(TableName.valueOf(hbaseTableName))
+    val table = dao.getTable(TableName.valueOf(hbaseTableName))
     val contigs = sequences.toAvro
 
     val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
     val encoder = EncoderFactory.get().binaryEncoder(baos, null)
 
+    val contigDatumWriter: DatumWriter[Contig] =
+      new SpecificDatumWriter[Contig](scala.reflect.classTag[Contig].runtimeClass.asInstanceOf[Class[Contig]])
     contigs.foreach((x) => {
-      val contigDatumWriter: DatumWriter[Contig] =
-        new SpecificDatumWriter[Contig](scala.reflect.classTag[Contig].runtimeClass.asInstanceOf[Class[Contig]])
+
       contigDatumWriter.write(x, encoder)
     })
 
@@ -255,12 +258,11 @@ object HBaseFunctions {
 
     val table: Table = dao.getTable(TableName.valueOf(hbaseTableName))
 
+    val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(baos, null)
+    val sampleDatumWriter: DatumWriter[Sample] =
+      new SpecificDatumWriter[Sample](scala.reflect.classTag[Sample].runtimeClass.asInstanceOf[Class[Sample]])
     samples.foreach((x) => {
-      val baos: java.io.ByteArrayOutputStream = new ByteArrayOutputStream()
-      val encoder = EncoderFactory.get().binaryEncoder(baos, null)
-
-      val sampleDatumWriter: DatumWriter[Sample] =
-        new SpecificDatumWriter[Sample](scala.reflect.classTag[Sample].runtimeClass.asInstanceOf[Class[Sample]])
       sampleDatumWriter.write(x, encoder)
       encoder.flush()
       baos.flush()
