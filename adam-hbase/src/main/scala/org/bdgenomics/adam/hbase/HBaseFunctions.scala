@@ -144,7 +144,7 @@ object HBaseFunctions {
       // This permission change appears necessary, plan to revisit to find better way
 
       val fileSystem = FileSystem.get(conf)
-      fileSystem.setPermission(new Path(stagingFolder), FsPermission.createImmutable(10))
+      fileSystem.setPermission(new Path(stagingFolder), FsPermission.valueOf("ug+rw"))
 
       val load = new LoadIncrementalHFiles(conf)
       load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)),
