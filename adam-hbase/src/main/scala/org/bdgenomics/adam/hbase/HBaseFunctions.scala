@@ -142,9 +142,10 @@ object HBaseFunctions {
         HConstants.DEFAULT_MAX_FILE_SIZE)
 
       // This permission change appears necessary, plan to revisit to find better way
-
-      val fileSystem = FileSystem.get(conf)
-      fileSystem.setPermission(new Path(stagingFolder), FsPermission.valueOf("-rw-rw----"))
+      ("hadoop fs -chmod R 660 " + stagingFolder) !
+      // would be better to use hadoop file api as below, but seems not to work
+      // val fileSystem = FileSystem.get(conf)
+      //fileSystem.setPermission(new Path(stagingFolder), FsPermission.valueOf("-rw-rw----"))
 
       val load = new LoadIncrementalHFiles(conf)
       load.doBulkLoad(new Path(stagingFolder), admin, connection.getTable(TableName.valueOf(hbaseTableName)),
