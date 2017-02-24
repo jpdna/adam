@@ -142,7 +142,7 @@ object HBaseFunctions {
         HConstants.DEFAULT_MAX_FILE_SIZE)
 
       // This permission change appears necessary, plan to revisit to find better way
-      ("hadoop fs -chmod -R 777 " + stagingFolder) !
+      ("hadoop fs -chmod -R 770 " + stagingFolder) !
       // would be better to use hadoop file api as below, but seems not to work
       // val fileSystem = FileSystem.get(conf)
       //fileSystem.setPermission(new Path(stagingFolder), FsPermission.valueOf("-rw-rw----"))
