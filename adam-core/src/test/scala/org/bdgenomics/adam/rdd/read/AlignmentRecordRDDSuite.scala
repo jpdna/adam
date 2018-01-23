@@ -638,7 +638,7 @@ class AlignmentRecordRDDSuite extends ADAMFunSuite {
     assert(rdd3.dataset.count === 20)
   }
 
-  sparkTest("load from sam, save as partitioend parquet, and and re-read from partitioned parquet") {
+  sparkTest("load from sam, save as partitioned parquet, and and re-read from partitioned parquet") {
     def testMetadata(arRdd: AlignmentRecordRDD) {
       val sequenceRdd = arRdd.addSequence(SequenceRecord("aSequence", 1000L))
       assert(sequenceRdd.sequences.containsRefName("aSequence"))
@@ -658,7 +658,7 @@ class AlignmentRecordRDDSuite extends ADAMFunSuite {
     assert(rdd2.rdd.count === 3)
     assert(rdd2.dataset.count === 3)
 
-    val rdd3 = sc.loadPartitionedParquetAlignments(outputPath, Option(List(ReferenceRegion("1", 240000000L, 241000000L), ReferenceRegion("2", 189000000L, 190000000L))))
+    val rdd3 = sc.loadPartitionedParquetAlignments(outputPath, List(ReferenceRegion("1", 240000000L, 241000000L), ReferenceRegion("2", 189000000L, 190000000L)))
     assert(rdd3.dataset.count === 2)
     assert(rdd3.rdd.count === 2)
 

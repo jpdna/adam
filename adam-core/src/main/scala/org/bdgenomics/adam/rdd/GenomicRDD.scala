@@ -2519,27 +2519,31 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     saveAsParquet(new JavaSaveArgs(filePath))
   }
 
+  /**
+   * Saves this RDD to disk in range binned partitioned Parquet + Avro format
+   *
+   * @param filePath Path to save the file at.
+   */
   def writePartitionedParquetFlag(filePath: String): Boolean = {
     val path = new Path(filePath, "_isPartitionedByStartPos")
-    val fs = path.getFileSystem(toDF().sqlContext.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
     fs.createNewFile(path)
   }
 
-  def saveAsPartitionedParquet(filePath: String,
-                               compressCodec: CompressionCodecName = CompressionCodecName.GZIP,
-                               partitionSize: Int = 1000000) {
+  private[rdd] def saveAsPartitionedParquet(filePath: String,
+                                            compressCodec: CompressionCodecName = CompressionCodecName.GZIP,
+                                            partitionSize: Int = 1000000) {
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")
     val df = toDF()
 
-    df.withColumn("posBin", floor(df("start") / partitionSize))
+    df.withColumn("positionBin", floor(df("start") / partitionSize))
       .write
-      .partitionBy("contigName", "posBin")
+      .partitionBy("contigName", "positionBin")
       .format("parquet")
       .option("spark.sql.parquet.compression.codec", compressCodec.toString.toLowerCase())
       .save(filePath)
     writePartitionedParquetFlag(filePath)
-    //rdd.context.writePartitionedParquetFlag(filePath)
     saveMetadata(filePath)
   }
 
