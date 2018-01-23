@@ -925,7 +925,7 @@ class FeatureRDDSuite extends ADAMFunSuite {
     assert(rdd3.dataset.count === 4)
   }
 
-  sparkTest("load paritioned parquet to sql, save, re-read from avro") {
+  sparkTest("load partitioned parquet to sql, save, re-read from avro") {
     def testMetadata(fRdd: FeatureRDD) {
       val sequenceRdd = fRdd.addSequence(SequenceRecord("aSequence", 1000L))
       assert(sequenceRdd.sequences.containsRefName("aSequence"))
