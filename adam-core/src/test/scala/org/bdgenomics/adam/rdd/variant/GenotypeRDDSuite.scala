@@ -128,7 +128,7 @@ class GenotypeRDDSuite extends ADAMFunSuite {
     assert(starts(752790L))
   }
 
-  sparkTest("round trip to paritioned parquet") {
+  sparkTest("round trip to partitioned parquet") {
     val genotypes = sc.loadGenotypes(testFile("small.vcf"))
     val outputPath = tmpLocation()
     genotypes.saveAsPartitionedParquet(outputPath)
