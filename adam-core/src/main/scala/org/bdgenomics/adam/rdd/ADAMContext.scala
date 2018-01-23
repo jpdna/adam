@@ -1827,9 +1827,10 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns an AlignmentRecordRDD.
    */
-  def loadPartitionedParquetAlignments(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): AlignmentRecordRDD = {
+  def loadPartitionedParquetAlignments(pathName: String,
+                                       regions: Iterable[ReferenceRegion] = Iterable.empty): AlignmentRecordRDD = {
 
-    require(checkPartitionedParquetFlag(pathName),
+    require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
 
     // convert avro to sequence dictionary
@@ -2245,7 +2246,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a GenotypeRDD.
    */
   def loadPartitionedParquetGenotypes(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): GenotypeRDD = {
-    require(checkPartitionedParquetFlag(pathName),
+    require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
     // load header lines
     val headers = loadHeaderLines(pathName)
@@ -2309,9 +2310,10 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns a VariantRDD
    */
+  def loadPartitionedParquetVariants(pathName: String,
+                                     regions: Iterable[ReferenceRegion] = Iterable.empty): VariantRDD = {
 
-  def loadPartitionedParquetVariants(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): VariantRDD = {
-    require(checkPartitionedParquetFlag(pathName),
+    require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
     val sd = loadAvroSequenceDictionary(pathName)
 
@@ -2656,7 +2658,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a FeatureRDD.
    */
   def loadPartitionedParquetFeatures(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): FeatureRDD = {
-    require(checkPartitionedParquetFlag(pathName),
+    require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
     val sd = loadAvroSequenceDictionary(pathName)
     val features = ParquetUnboundFeatureRDD(sc, pathName, sd)
@@ -2712,7 +2714,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a NucleotideContigFragmentRDD
    */
   def loadPartitionedParquetFragments(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
-    require(checkPartitionedParquetFlag(pathName),
+    require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
     val sd = loadAvroSequenceDictionary(pathName)
     val nucleotideContigFragments = ParquetUnboundNucleotideContigFragmentRDD(sc, pathName, sd)
@@ -3158,13 +3160,13 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Return true if the specified path of Parquet + Avro files is partitioned.
    * Behavior is undefined if some paths in glob are contain paritioned flag and some do not.
    */
-  def checkPartitionedParquetFlag(filePath: String): Boolean = {
+  def isPartitioned(filePath: String): Boolean = {
     val path = new Path(filePath, "_isPartitionedByStartPos")
     val fs = path.getFileSystem(sc.hadoopConfiguration)
 
     val files: Array[Path] = getFsAndFilesWithFilter(filePath, new FileFilter("_isPartitionedByStartPos"))
 
-    // if getFsAndFilesWithFilter calls succeeds without an exception then _isPartitionedByStartPos was found
+    // if getFsAndFilesWithFilter calls succeeds without throwing an exception then _isPartitionedByStartPos was found
     // so we return true
     return true
 
@@ -3180,28 +3182,10 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
 
   def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000): String = {
 
-    println("This is input regions: ")
-    regions.foreach(x => println(x))
-
-    val regionQueryString = regions.map(r => "(contigName=" + "\'" + r.referenceName + "\' and positionBin >= \'" +
+    regions.map(r => "(contigName=" + "\'" + r.referenceName + "\' and positionBin >= \'" +
       scala.math.floor(r.start / partitionSize).toInt + "\' and positionBin < \'" +
       (scala.math.floor(r.end / partitionSize).toInt + 1) +
       "\' and start >= " + r.start + " and end <= " + r.end + ")")
       .mkString(" or ")
-
-    var regionQueryString_old = "(contigName=" + "\'" + regions.head.referenceName + "\' and positionBin >= \'" +
-      scala.math.floor(regions.head.start / partitionSize).toInt + "\' and positionBin < \'" + (scala.math.floor(regions.head.end / partitionSize).toInt + 1) + "\' and start >= " + regions.head.start + " and end <= " + regions.head.end + ")"
-    if (regions.size > 1) {
-      regions.foreach((i) => {
-        regionQueryString_old = regionQueryString_old + " or " + "(contigName=" + "\'" +
-          i.referenceName + "\' and positionBin >= \'" + scala.math.floor(i.start / partitionSize).toInt + "\' and positionBin < \'" + (scala.math.floor(i.end / partitionSize).toInt + 1) + "\' and  start >= " + i.start + " and end <= " + i.end + ")"
-      })
-    }
-
-    println("new region QueryStirng: " + regionQueryString)
-    println("old region Query Stirng: " + regionQueryString_old)
-
-    regionQueryString
-
   }
 }
