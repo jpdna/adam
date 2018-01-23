@@ -156,7 +156,7 @@ class NucleotideContigFragmentRDDSuite extends ADAMFunSuite {
     val dsBound = fragments1.transformDataset(ds => ds)
     testMetadata(dsBound)
     dsBound.saveAsPartitionedParquet(output1)
-    val fragments2 = sc.loadPartitionedParquetFragments(output1)
+    val fragments2 = sc.loadPartitionedParquetContigFragments(output1)
     testMetadata(fragments2)
     assert(fragments2.rdd.count === 8L)
     assert(fragments2.dataset.count === 8L)
@@ -166,7 +166,7 @@ class NucleotideContigFragmentRDDSuite extends ADAMFunSuite {
     val rddBound = fragments2.transform(rdd => rdd)
     testMetadata(rddBound)
     rddBound.saveAsPartitionedParquet(output2)
-    val fragments3 = sc.loadPartitionedParquetFragments(output2)
+    val fragments3 = sc.loadPartitionedParquetContigFragments(output2)
     assert(fragments3.rdd.count === 8L)
     assert(fragments3.dataset.count === 8L)
   }

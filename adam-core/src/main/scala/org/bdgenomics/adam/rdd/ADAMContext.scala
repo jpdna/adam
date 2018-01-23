@@ -2762,7 +2762,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns a NucleotideContigFragmentRDD
    */
-  def loadPartitionedParquetFragments(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
+  def loadPartitionedParquetContigFragments(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
     val sd = loadAvroSequenceDictionary(pathName)
@@ -3212,20 +3212,18 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
   def isPartitioned(filePath: String): Boolean = {
     val path = new Path(filePath, "_isPartitionedByStartPos")
     val fs = path.getFileSystem(sc.hadoopConfiguration)
-
     val files: Array[Path] = getFsAndFilesWithFilter(filePath, new FileFilter("_isPartitionedByStartPos"))
 
     // if getFsAndFilesWithFilter calls succeeds without throwing an exception then _isPartitionedByStartPos was found
     // so we return true
     return true
-
   }
 
   /**
    * Returns a query string used to filter a dataset based on zero or more ReferenceRegions
    *
    * @param regions Zero or more regions to include in a query.
-   * @param partitionSize size of of partitions used when writing parquet, in base pairs.  Defaults to 1000000
+   * @param partitionSize size of of partitions used when writing parquet, in base pairs.  Defaults to 1000000.
    * @return Returns a query string used to filter a dataset based on zero or more ReferenceRegions
    */
 

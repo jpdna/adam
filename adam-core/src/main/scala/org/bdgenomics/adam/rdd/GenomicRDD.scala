@@ -2537,9 +2537,16 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     fs.createNewFile(path)
   }
 
-  private[rdd] def saveAsPartitionedParquet(filePath: String,
-                                            compressCodec: CompressionCodecName = CompressionCodecName.GZIP,
-                                            partitionSize: Int = 1000000) {
+  /**
+   *  Saves this RDD to disk in range binned partitioned Parquet + Avro format
+   *
+   * @param filePath Path to save the file at.
+   * @param compressCodec Name of the compression codec to use.
+   * @param partitionSize size of partitions used when writing parquet, in base pairs.  Defaults to 1000000.
+   */
+  def saveAsPartitionedParquet(filePath: String,
+                               compressCodec: CompressionCodecName = CompressionCodecName.GZIP,
+                               partitionSize: Int = 1000000) {
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")
     val df = toDF()
