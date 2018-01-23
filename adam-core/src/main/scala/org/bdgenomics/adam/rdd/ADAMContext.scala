@@ -18,15 +18,20 @@
 package org.bdgenomics.adam.rdd
 
 import java.io.{ File, FileNotFoundException, InputStream }
-
 import htsjdk.samtools.{ SAMFileHeader, SAMProgramRecord, ValidationStringency }
 import htsjdk.samtools.util.Locatable
-import htsjdk.variant.vcf.{ VCFCompoundHeaderLine, VCFFormatHeaderLine, VCFHeader, VCFHeaderLine, VCFInfoHeaderLine }
+import htsjdk.variant.vcf.{
+  VCFHeader,
+  VCFCompoundHeaderLine,
+  VCFFormatHeaderLine,
+  VCFHeaderLine,
+  VCFInfoHeaderLine
+}
 import org.apache.avro.Schema
 import org.apache.avro.file.DataFileStream
 import org.apache.avro.generic.{ GenericDatumReader, GenericRecord, IndexedRecord }
 import org.apache.avro.specific.{ SpecificDatumReader, SpecificRecord, SpecificRecordBase }
-import org.apache.hadoop.fs.{ FileStatus, FileSystem, Path, PathFilter }
+import org.apache.hadoop.fs.{ FileSystem, Path, PathFilter }
 import org.apache.hadoop.io.{ LongWritable, Text }
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
@@ -37,22 +42,65 @@ import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.MetricsContext._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{ Dataset, SparkSession }
+import org.apache.spark.sql.{ SparkSession, Dataset }
 import org.bdgenomics.adam.converters._
 import org.bdgenomics.adam.instrumentation.Timers._
 import org.bdgenomics.adam.io._
 import org.bdgenomics.adam.models._
-import org.bdgenomics.adam.projections.{ FeatureField, Projection }
-import org.bdgenomics.adam.rdd.contig.{ DatasetBoundNucleotideContigFragmentRDD, NucleotideContigFragmentRDD, ParquetUnboundNucleotideContigFragmentRDD, RDDBoundNucleotideContigFragmentRDD }
+import org.bdgenomics.adam.projections.{
+  FeatureField,
+  Projection
+}
+import org.bdgenomics.adam.rdd.contig.{
+  DatasetBoundNucleotideContigFragmentRDD,
+  NucleotideContigFragmentRDD,
+  ParquetUnboundNucleotideContigFragmentRDD,
+  RDDBoundNucleotideContigFragmentRDD
+}
 import org.bdgenomics.adam.rdd.feature._
-import org.bdgenomics.adam.rdd.fragment.{ DatasetBoundFragmentRDD, FragmentRDD, ParquetUnboundFragmentRDD, RDDBoundFragmentRDD }
-import org.bdgenomics.adam.rdd.read.{ AlignmentRecordRDD, DatasetBoundAlignmentRecordRDD, ParquetUnboundAlignmentRecordRDD, RDDBoundAlignmentRecordRDD, RepairPartitions }
+import org.bdgenomics.adam.rdd.fragment.{
+  DatasetBoundFragmentRDD,
+  FragmentRDD,
+  ParquetUnboundFragmentRDD,
+  RDDBoundFragmentRDD
+}
+import org.bdgenomics.adam.rdd.read.{
+  AlignmentRecordRDD,
+  DatasetBoundAlignmentRecordRDD,
+  RepairPartitions,
+  ParquetUnboundAlignmentRecordRDD,
+  RDDBoundAlignmentRecordRDD
+}
 import org.bdgenomics.adam.rdd.variant._
 import org.bdgenomics.adam.rich.RichAlignmentRecord
-import org.bdgenomics.adam.sql.{ AlignmentRecord => AlignmentRecordProduct, Feature => FeatureProduct, Fragment => FragmentProduct, Genotype => GenotypeProduct, NucleotideContigFragment => NucleotideContigFragmentProduct, Variant => VariantProduct }
+import org.bdgenomics.adam.sql.{
+  AlignmentRecord => AlignmentRecordProduct,
+  Feature => FeatureProduct,
+  Fragment => FragmentProduct,
+  Genotype => GenotypeProduct,
+  NucleotideContigFragment => NucleotideContigFragmentProduct,
+  Variant => VariantProduct
+}
 import org.bdgenomics.adam.util.FileExtensions._
-import org.bdgenomics.adam.util.{ GenomeFileReader, ReferenceContigMap, ReferenceFile, SequenceDictionaryReader, TwoBitFile }
-import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig, Feature, Fragment, Genotype, NucleotideContigFragment, ProcessingStep, Sample, Variant, RecordGroup => RecordGroupMetadata }
+import org.bdgenomics.adam.util.{
+  GenomeFileReader,
+  ReferenceContigMap,
+  ReferenceFile,
+  SequenceDictionaryReader,
+  TwoBitFile
+}
+import org.bdgenomics.formats.avro.{
+  AlignmentRecord,
+  Contig,
+  Feature,
+  Fragment,
+  Genotype,
+  NucleotideContigFragment,
+  ProcessingStep,
+  RecordGroup => RecordGroupMetadata,
+  Sample,
+  Variant
+}
 import org.bdgenomics.utils.instrumentation.Metrics
 import org.bdgenomics.utils.io.LocalFileByteAccess
 import org.bdgenomics.utils.misc.{ HadoopUtil, Logging }
@@ -60,7 +108,6 @@ import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 import org.seqdoop.hadoop_bam._
 import org.seqdoop.hadoop_bam.util._
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
