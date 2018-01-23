@@ -2543,7 +2543,6 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")
     val df = toDF()
-
     df.withColumn("positionBin", floor(df("start") / partitionSize))
       .write
       .partitionBy("contigName", "positionBin")

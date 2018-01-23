@@ -1322,7 +1322,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
       }
       fs.listStatus(path, filter)
     } else {
-      val paths: Array[FileStatus] = fs.globStatus(path)
+      val paths = fs.globStatus(path)
       if (paths == null || paths.isEmpty) {
         throw new FileNotFoundException(
           s"Couldn't find any files matching ${path.toUri}"
