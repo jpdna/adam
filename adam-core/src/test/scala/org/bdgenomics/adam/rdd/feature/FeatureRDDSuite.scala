@@ -937,13 +937,9 @@ class FeatureRDDSuite extends ADAMFunSuite {
     testMetadata(rrdd)
     val rdd = rrdd.transformDataset(ds => ds) // no-op but force to ds
     testMetadata(rdd)
-    assert(rdd.dataset.count === 4)
-    assert(rdd.rdd.count === 4)
     rdd.saveAsPartitionedParquet(outputPath)
     val rdd2 = sc.loadPartitionedParquetFeatures(outputPath)
     testMetadata(rdd2)
-    assert(rdd2.rdd.count === 4)
-    assert(rdd2.dataset.count === 4)
     val outputPath2 = tmpLocation()
     rdd.transform(rdd => rdd) // no-op but force to rdd
       .saveAsPartitionedParquet(outputPath2)

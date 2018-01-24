@@ -888,5 +888,4 @@ class NucleotideContigFragmentRDDSuite extends ADAMFunSuite {
 
     checkSave(variantContexts)
   }
-
 }

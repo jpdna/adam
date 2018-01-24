@@ -134,7 +134,6 @@ class GenotypeRDDSuite extends ADAMFunSuite {
     genotypes.saveAsPartitionedParquet(outputPath)
     val unfilteredGenotypes = sc.loadPartitionedParquetGenotypes(outputPath)
     assert(unfilteredGenotypes.rdd.count === 18)
-
   }
 
   sparkTest("use broadcast join to pull down genotypes mapped to targets") {
