@@ -3209,13 +3209,13 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Return true if the specified path of Parquet + Avro files is partitioned.
    * Behavior is undefined if some paths in glob are contain paritioned flag and some do not.
    */
-  def isPartitioned(filePath: String): Boolean = {
-    val path = new Path(filePath, "_isPartitionedByStartPos")
-    val fs = path.getFileSystem(sc.hadoopConfiguration)
-    val files: Array[Path] = getFsAndFilesWithFilter(filePath, new FileFilter("_isPartitionedByStartPos"))
+  def isPartitioned(pathName: String): Boolean = {
 
-    // if getFsAndFilesWithFilter calls succeeds without throwing an exception then _isPartitionedByStartPos was found
-    // so we return true
+    try {
+      getFsAndFilesWithFilter(pathName, new FileFilter("_isPartitionedByStartPos"))
+    } catch {
+      case e: Exception => return false
+    }
     return true
   }
 
