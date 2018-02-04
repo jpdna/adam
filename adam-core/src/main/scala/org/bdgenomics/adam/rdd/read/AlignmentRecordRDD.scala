@@ -238,6 +238,41 @@ case class ParquetUnboundAlignmentRecordRDD private[rdd] (
   }
 }
 
+case class ORCUnboundAlignmentRecordRDD private[rdd] (
+             @transient private val sc: SparkContext,
+             private val parquetFilename: String,
+             sequences: SequenceDictionary,
+             recordGroups: RecordGroupDictionary,
+             @transient val processingSteps: Seq[ProcessingStep]) extends AlignmentRecordRDD {
+
+  //lazy val optPartitionMap = sc.extractPartitionMap(parquetFilename)
+
+  lazy val rdd: RDD[AlignmentRecord] = {
+    sc.loadParquet(parquetFilename)
+  }
+
+  lazy val dataset = {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    import sqlContext.implicits._
+    sqlContext.read.parquet(parquetFilename).as[AlignmentRecordProduct]
+  }
+
+  def replaceSequences(
+                        newSequences: SequenceDictionary): AlignmentRecordRDD = {
+    copy(sequences = newSequences)
+  }
+
+  def replaceRecordGroups(
+                           newRecordGroups: RecordGroupDictionary): AlignmentRecordRDD = {
+    copy(recordGroups = newRecordGroups)
+  }
+
+  def replaceProcessingSteps(
+                              newProcessingSteps: Seq[ProcessingStep]): AlignmentRecordRDD = {
+    copy(processingSteps = newProcessingSteps)
+  }
+}
+
 case class DatasetBoundAlignmentRecordRDD private[rdd] (
     dataset: Dataset[AlignmentRecordProduct],
     sequences: SequenceDictionary,
