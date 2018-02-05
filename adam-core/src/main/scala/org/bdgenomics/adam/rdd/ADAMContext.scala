@@ -1830,7 +1830,8 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns an AlignmentRecordRDD.
    */
   def loadPartitionedParquetAlignments(pathName: String,
-                                       regions: Iterable[ReferenceRegion] = Iterable.empty): AlignmentRecordRDD = {
+                                       regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                       existingDataset: AlignmentRecordRDD = null): AlignmentRecordRDD = {
 
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
@@ -1840,11 +1841,9 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
 
     // convert avro to sequence dictionary
     val rgd = loadAvroRecordGroupDictionary(pathName)
-
     val pgs = loadAvroPrograms(pathName)
-    val reads: AlignmentRecordRDD = ParquetUnboundAlignmentRecordRDD(sc, pathName, sd, rgd, pgs)
 
-    //val x: Dataset[Any] = reads.dataset
+    val reads = if (existingDataset != null) { existingDataset } else ParquetUnboundAlignmentRecordRDD(sc, pathName, sd, rgd, pgs)
 
     val datasetBoundAlignmentRecordRDD =
       if (regions.nonEmpty) {
@@ -1892,8 +1891,6 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
       }
     datasetBoundAlignmentRecordRDD
   }
-
-
 
   /**
    * Load unaligned alignment records from interleaved FASTQ into an AlignmentRecordRDD.

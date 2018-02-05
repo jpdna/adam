@@ -2552,7 +2552,10 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     saveMetadata(filePath)
   }
 
-  def saveAsORC(filePath: String, partitionSize: Int = 1000000) {
+  def saveAsORC(filePath: String,
+                compressionCodec: String = "zlib",
+                stripSize: Int  = 67108864,
+                partitionSize: Int = 1000000) {
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")
 
@@ -2561,7 +2564,8 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
       .withColumn("positionBin", floor(df("start") / partitionSize))
       .write.format("orc")
       .partitionBy("contigName", "positionBin")
-      .option("compression", "zlib")
+      .option("compression", compressionCodec)
+      .option("orc.stripe.size", 67108864)
       .save(filePath)
     saveMetadata(filePath)
   }
