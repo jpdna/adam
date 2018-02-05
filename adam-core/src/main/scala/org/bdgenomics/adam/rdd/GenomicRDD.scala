@@ -18,38 +18,29 @@
 package org.bdgenomics.adam.rdd
 
 import java.nio.file.Paths
+
 import htsjdk.samtools.ValidationStringency
 import org.apache.avro.generic.IndexedRecord
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.spark.SparkFiles
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.function.{ Function => JFunction, Function2 }
+import org.apache.spark.api.java.function.{ Function2, Function => JFunction }
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{ DataFrame, Dataset, SQLContext }
+import org.apache.spark.sql.{ Column, DataFrame, Dataset, SQLContext }
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.bdgenomics.adam.instrumentation.Timers._
-import org.bdgenomics.adam.models.{
-  RecordGroup,
-  RecordGroupDictionary,
-  ReferenceRegion,
-  SequenceDictionary,
-  SequenceRecord
-}
+import org.bdgenomics.adam.models.{ RecordGroup, RecordGroupDictionary, ReferenceRegion, SequenceDictionary, SequenceRecord }
 import org.bdgenomics.adam.util.{ ManualRegionPartitioner, TextRddWriter }
-import org.bdgenomics.formats.avro.{
-  Contig,
-  ProcessingStep,
-  RecordGroup => RecordGroupMetadata,
-  Sample
-}
+import org.bdgenomics.formats.avro.{ Contig, ProcessingStep, Sample, RecordGroup => RecordGroupMetadata }
 import org.bdgenomics.utils.cli.SaveArgs
 import org.bdgenomics.utils.interval.array.IntervalArray
 import org.bdgenomics.utils.misc.Logging
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.math.min
@@ -2550,6 +2541,7 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")
     val df = toDF()
+
     df.withColumn("positionBin", floor(df("start") / partitionSize))
       .write
       .partitionBy("contigName", "positionBin")
@@ -2557,6 +2549,20 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
       .option("spark.sql.parquet.compression.codec", compressCodec.toString.toLowerCase())
       .save(filePath)
     writePartitionedParquetFlag(filePath)
+    saveMetadata(filePath)
+  }
+
+  def saveAsORC(filePath: String, partitionSize: Int = 1000000) {
+    log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
+      "Options other than compression codec are ignored.")
+
+    val df = toDF()
+    df.orderBy("contigName", "start")
+      .withColumn("positionBin", floor(df("start") / partitionSize))
+      .write.format("orc")
+      .partitionBy("contigName", "positionBin")
+      .option("compression", "zlib")
+      .save(filePath)
     saveMetadata(filePath)
   }
 

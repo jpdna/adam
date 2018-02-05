@@ -23,6 +23,7 @@ import htsjdk.samtools.util.{ BinaryCodec, BlockCompressedOutputStream }
 import java.io.{ OutputStream, StringWriter, Writer }
 import java.net.URI
 import java.nio.file.Paths
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.LongWritable
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
@@ -31,28 +32,15 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.MetricsContext._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{ Dataset, Row, SQLContext }
+import org.apache.spark.sql.{ Column, Dataset, Row, SQLContext }
 import org.apache.spark.storage.StorageLevel
-import org.bdgenomics.adam.algorithms.consensus.{
-  ConsensusGenerator,
-  ConsensusGeneratorFromReads,
-  NormalizationUtils
-}
+import org.bdgenomics.adam.algorithms.consensus.{ ConsensusGenerator, ConsensusGeneratorFromReads, NormalizationUtils }
 import org.bdgenomics.adam.converters.AlignmentRecordConverter
 import org.bdgenomics.adam.instrumentation.Timers._
 import org.bdgenomics.adam.models._
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.{
-  AvroRecordGroupGenomicRDD,
-  ADAMSaveAnyArgs,
-  JavaSaveArgs,
-  SAMHeaderWriter
-}
-import org.bdgenomics.adam.rdd.feature.{
-  CoverageRDD,
-  DatasetBoundCoverageRDD,
-  RDDBoundCoverageRDD
-}
+import org.bdgenomics.adam.rdd.{ ADAMSaveAnyArgs, AvroRecordGroupGenomicRDD, JavaSaveArgs, SAMHeaderWriter }
+import org.bdgenomics.adam.rdd.feature.{ CoverageRDD, DatasetBoundCoverageRDD, RDDBoundCoverageRDD }
 import org.bdgenomics.adam.rdd.read.realignment.RealignIndels
 import org.bdgenomics.adam.rdd.read.recalibration.BaseQualityRecalibration
 import org.bdgenomics.adam.rdd.fragment.FragmentRDD
@@ -61,11 +49,9 @@ import org.bdgenomics.adam.sql.{ AlignmentRecord => AlignmentRecordProduct }
 import org.bdgenomics.adam.serialization.AvroSerializer
 import org.bdgenomics.adam.util.{ FileMerger, ReferenceFile }
 import org.bdgenomics.formats.avro._
-import org.bdgenomics.utils.interval.array.{
-  IntervalArray,
-  IntervalArraySerializer
-}
+import org.bdgenomics.utils.interval.array.{ IntervalArray, IntervalArraySerializer }
 import org.seqdoop.hadoop_bam._
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.math.{ abs, min }
@@ -238,14 +224,15 @@ case class ParquetUnboundAlignmentRecordRDD private[rdd] (
   }
 }
 
+/*
 case class ORCUnboundAlignmentRecordRDD private[rdd] (
-             @transient private val sc: SparkContext,
-             private val parquetFilename: String,
-             sequences: SequenceDictionary,
-             recordGroups: RecordGroupDictionary,
-             @transient val processingSteps: Seq[ProcessingStep]) extends AlignmentRecordRDD {
+    @transient private val sc: SparkContext,
+    private val parquetFilename: String,
+    sequences: SequenceDictionary,
+    recordGroups: RecordGroupDictionary,
+    @transient val processingSteps: Seq[ProcessingStep]) extends AlignmentRecordRDD {
 
-  //lazy val optPartitionMap = sc.extractPartitionMap(parquetFilename)
+  lazy val optPartitionMap =  None
 
   lazy val rdd: RDD[AlignmentRecord] = {
     sc.loadParquet(parquetFilename)
@@ -258,20 +245,21 @@ case class ORCUnboundAlignmentRecordRDD private[rdd] (
   }
 
   def replaceSequences(
-                        newSequences: SequenceDictionary): AlignmentRecordRDD = {
+    newSequences: SequenceDictionary): AlignmentRecordRDD = {
     copy(sequences = newSequences)
   }
 
   def replaceRecordGroups(
-                           newRecordGroups: RecordGroupDictionary): AlignmentRecordRDD = {
+    newRecordGroups: RecordGroupDictionary): AlignmentRecordRDD = {
     copy(recordGroups = newRecordGroups)
   }
 
   def replaceProcessingSteps(
-                              newProcessingSteps: Seq[ProcessingStep]): AlignmentRecordRDD = {
+    newProcessingSteps: Seq[ProcessingStep]): AlignmentRecordRDD = {
     copy(processingSteps = newProcessingSteps)
   }
 }
+*/
 
 case class DatasetBoundAlignmentRecordRDD private[rdd] (
     dataset: Dataset[AlignmentRecordProduct],
@@ -295,6 +283,29 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
       .option("spark.sql.parquet.compression.codec", compressCodec.toString.toLowerCase())
       .save(filePath)
     saveMetadata(filePath)
+
+    //val x: Column = dataset("start")
+
+    /*
+    def saveAsORC(filePath: String) = {
+      log.warn("Saving directing as ORC from SQL")
+      val df = dataset.toDF()
+
+      val x: Int = df("start").toString().toInt
+
+      //x.to
+
+      val partitionSize = 1000000
+      df.orderBy("contigName", "start")
+        .withColumn("positionBin", floor( df("start") / partitionSize))
+        .write.format("orc")
+        .partitionBy("contigName", "positionBin")
+        .option("compression", "zlib")
+        .save(filePath)
+      saveMetadata(filePath)
+    }
+    */
+
   }
 
   override def transformDataset(
