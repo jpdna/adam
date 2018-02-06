@@ -2554,7 +2554,7 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
 
   def saveAsORC(filePath: String,
                 compressionCodec: String = "zlib",
-                stripSize: Int  = 67108864,
+                stripSize: Int = 67108864,
                 partitionSize: Int = 1000000) {
     log.warn("Saving directly as Hive-partitioned Parquet from SQL. " +
       "Options other than compression codec are ignored.")

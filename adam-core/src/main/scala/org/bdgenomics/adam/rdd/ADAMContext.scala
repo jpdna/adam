@@ -1843,7 +1843,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     val rgd = loadAvroRecordGroupDictionary(pathName)
     val pgs = loadAvroPrograms(pathName)
 
-    val reads = if (existingDataset != null) { existingDataset } else ParquetUnboundAlignmentRecordRDD(sc, pathName, sd, rgd, pgs)
+    val reads: AlignmentRecordRDD = if (existingDataset != null) { existingDataset } else ParquetUnboundAlignmentRecordRDD(sc, pathName, sd, rgd, pgs)
 
     val datasetBoundAlignmentRecordRDD =
       if (regions.nonEmpty) {
@@ -1858,7 +1858,8 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
   }
 
   def loadORCAlignments(pathName: String,
-                        regions: Iterable[ReferenceRegion] = Iterable.empty): AlignmentRecordRDD = {
+                        regions: Iterable[ReferenceRegion] = Iterable.empty,
+                        existingDataset: AlignmentRecordRDD = null): AlignmentRecordRDD = {
 
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     import sqlContext.implicits._
@@ -1871,10 +1872,9 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
 
     // convert avro to sequence dictionary
     val rgd: RecordGroupDictionary = loadAvroRecordGroupDictionary(pathName)
-
     val pgs: Seq[ProcessingStep] = loadAvroPrograms(pathName)
 
-    val dataset = sqlContext.read.format("orc").load(pathName).as[AlignmentRecordProduct]
+    val dataset = if (existingDataset != null) { existingDataset.dataset } else sqlContext.read.format("orc").load(pathName).as[AlignmentRecordProduct]
 
     val datasetBoundAlignmentRecordRDD =
       if (regions.nonEmpty) {
