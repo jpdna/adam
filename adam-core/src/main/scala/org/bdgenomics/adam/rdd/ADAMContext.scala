@@ -3230,12 +3230,20 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a query string used to filter a dataset based on zero or more ReferenceRegions
    */
 
-  def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000): String = {
+  def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, lookBackNumPartitions: Int = 1): String = {
 
+    /*
     regions.map(r => "(contigName=" + "\'" + r.referenceName + "\' and positionBin >= \'" +
       scala.math.floor(r.start / partitionSize).toInt + "\' and positionBin < \'" +
       (scala.math.floor(r.end / partitionSize).toInt + 1) +
       "\' and start >= " + r.start + " and end <= " + r.end + ")")
       .mkString(" or ")
+    */
+    regions.map(r => "(contigName=" + "\'" + r.referenceName +
+      "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - lookBackNumPartitions) +
+      "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
+      "\' and (end > " + r.start + " and start < " + r.end + "))")
+      .mkString(" or ")
+
   }
 }
