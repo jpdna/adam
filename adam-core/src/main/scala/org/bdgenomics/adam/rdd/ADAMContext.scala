@@ -1882,6 +1882,23 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
 
+    val reads = loadParquetAlignments(pathName, optPredicate = None, optProjection = None)
+
+    val datasetBoundAlignmentRecordRDD = if (regions.nonEmpty) {
+      //DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
+      DatasetBoundAlignmentRecordRDD(reads.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
+        reads.sequences,
+        reads.recordGroups,
+        reads.processingSteps)
+
+       // .filterByOverlappingRegions(regions)
+    } else {
+      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
+    }
+
+    datasetBoundAlignmentRecordRDD
+
+    /*
     // convert avro to sequence dictionary
     val sd = loadAvroSequenceDictionary(pathName)
 
@@ -1901,6 +1918,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
         DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
       }
     datasetBoundAlignmentRecordRDD
+    */
   }
 
   /**
