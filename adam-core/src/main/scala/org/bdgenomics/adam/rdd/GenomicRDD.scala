@@ -55,6 +55,7 @@ import scala.collection.JavaConversions._
 import scala.math.min
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 private[rdd] class JavaSaveArgs(var outputPath: String,
                                 var blockSize: Int = 128 * 1024 * 1024,
@@ -2263,38 +2264,10 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
       })
   }
 
+  //todo: remove the noOp implementation once all subtypes implement
   def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
-    transformDataset((ds: Dataset[U]) => ds)
+    transformDataset((ds: Dataset[U]) => ds) // default implementation is noOp
   }
-
-  def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
-    transformDataset((ds: Dataset[U]) => ds)
-  }
-
-  /*
-  def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
-    import scala.util.Try
-
-    def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
-
-      //test if this dataset is bound to Partitioned Parquet having field positionBin
-      if (Try(dataset("positionBin")).isSuccess) {
-        regions.map(r => "(contigName=" + "\'" + r.referenceName +
-          "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
-          "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
-          "\' and (end > " + r.start + " and start < " + r.end + "))")
-          .mkString(" or ")
-      } else {
-        // if the dataset was not written with field positionBin then exclude it in query
-        regions.map(r => "(contigName=" + "\'" + r.referenceName +
-          "\' and (end > " + r.start + " and start < " + r.end + "))")
-          .mkString(" or ")
-      }
-    }
-    transformDataset((ds: Dataset[U]) => { ds.filter(referenceRegionsToDatasetQueryString(querys)) })
-  }
-  */
-
 }
 
 trait GenomicRDDWithLineage[T, U <: GenomicRDDWithLineage[T, U]] extends GenomicRDD[T, U] {
@@ -2500,6 +2473,22 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
   protected def saveMetadata(filePath: String): Unit = {
     savePartitionMap(filePath)
     saveSequences(filePath)
+  }
+
+  protected def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
+
+    //test if this dataset is bound to Partitioned Parquet having field positionBin
+    if (Try(dataset("positionBin")).isSuccess) {
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
+        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    } else { // if no positionBin field is found then construct query without bin optimization
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    }
   }
 
   /**

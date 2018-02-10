@@ -270,63 +270,8 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     copy(processingSteps = newProcessingSteps)
   }
 
-  override def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
-    import scala.util.Try
-
-    println("######\n######\n#######\n######\nHere I am in alignmentRecordRDD filterByOverlppingRegions")
-
-    def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
-
-      //test if this dataset is bound to Partitioned Parquet having field positionBin
-      //if (Try(dataset("positionBin")).isSuccess) {
-      regions.map(r => "(contigName=" + "\'" + r.referenceName +
-        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
-        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
-        "\' and (end > " + r.start + " and start < " + r.end + "))")
-        .mkString(" or ")
-
-      /*} else {
-        // if the dataset was not written with field positionBin then exclude it in query
-        regions.map(r => "(contigName=" + "\'" + r.referenceName +
-          "\' and (end > " + r.start + " and start < " + r.end + "))")
-          .mkString(" or ")
-      }*/
-    }
-    // transformDataset( (ds: Dataset[AlignmentRecordProduct]) => { ds.filter(referenceRegionsToDatasetQueryString(querys)) } )
-
-    val jp: AlignmentRecordRDD = transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys)).filter((x) => { (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0 }))
-    jp
-
-    //jp.transformDataset(d => d.filter(x  => {(x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0}) )
-
-    //.filter(x  => {(x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0}) )
-
-    //.filter(x:  => (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0))
-    //  .filter(x => (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0))
-
-  }
-
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
-    import scala.util.Try
-
-    println("######\n######\n#######\n######\nHere I am in alignmentRecordRDD filterByOverlppingRegions")
-
-    def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
-
-      //test if this dataset is bound to Partitioned Parquet having field positionBin
-      //if (Try(dataset("positionBin")).isSuccess) {
-      regions.map(r => "(contigName=" + "\'" + r.referenceName +
-        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
-        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
-        "\' and (end > " + r.start + " and start < " + r.end + "))")
-        .mkString(" or ")
-
-    }
-
-    //val jp: AlignmentRecordRDD = transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys)).filter((x) => { (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0 }))
-    val jp: AlignmentRecordRDD = transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys)))
-    jp
-
+    transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys, partitionSize, partitionedLookBackNum)))
   }
 
 }
