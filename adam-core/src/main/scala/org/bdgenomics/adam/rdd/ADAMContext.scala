@@ -1885,40 +1885,13 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     val reads = loadParquetAlignments(pathName, optPredicate = None, optProjection = None)
 
     val datasetBoundAlignmentRecordRDD = if (regions.nonEmpty) {
-      //DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
-      DatasetBoundAlignmentRecordRDD(reads.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-        reads.sequences,
-        reads.recordGroups,
-        reads.processingSteps)
-
-      // .filterByOverlappingRegions(regions)
+      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
+        .filterByOverlappingRegions(regions)
     } else {
       DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
     }
 
     datasetBoundAlignmentRecordRDD
-
-    /*
-    // convert avro to sequence dictionary
-    val sd = loadAvroSequenceDictionary(pathName)
-
-    // convert avro to sequence dictionary
-    val rgd = loadAvroRecordGroupDictionary(pathName)
-
-    val pgs = loadAvroPrograms(pathName)
-    val reads: AlignmentRecordRDD = ParquetUnboundAlignmentRecordRDD(sc, pathName, sd, rgd, pgs)
-
-    val datasetBoundAlignmentRecordRDD =
-      if (regions.nonEmpty) {
-        DatasetBoundAlignmentRecordRDD(reads.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-          reads.sequences,
-          reads.recordGroups,
-          reads.processingSteps)
-      } else {
-        DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
-      }
-    datasetBoundAlignmentRecordRDD
-    */
   }
 
   /**
@@ -3245,15 +3218,9 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a query string used to filter a dataset based on zero or more ReferenceRegions
    */
 
+  // todo: this function should be removed once all types migrated to use filterByOVerlap from GenomicRDD
   def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, lookBackNumPartitions: Int = 1): String = {
 
-    /*
-    regions.map(r => "(contigName=" + "\'" + r.referenceName + "\' and positionBin >= \'" +
-      scala.math.floor(r.start / partitionSize).toInt + "\' and positionBin < \'" +
-      (scala.math.floor(r.end / partitionSize).toInt + 1) +
-      "\' and start >= " + r.start + " and end <= " + r.end + ")")
-      .mkString(" or ")
-    */
     regions.map(r => "(contigName=" + "\'" + r.referenceName +
       "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - lookBackNumPartitions) +
       "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
@@ -3261,4 +3228,5 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
       .mkString(" or ")
 
   }
+
 }
