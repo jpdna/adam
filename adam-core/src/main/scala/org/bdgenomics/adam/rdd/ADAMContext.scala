@@ -1894,7 +1894,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
         reads.recordGroups,
         reads.processingSteps)
 
-       // .filterByOverlappingRegions(regions)
+      // .filterByOverlappingRegions(regions)
     } else {
       DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
     }

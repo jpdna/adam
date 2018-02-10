@@ -2262,6 +2262,29 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
         convFn.call(v, dsX)
       })
   }
+
+  def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
+    import scala.util.Try
+
+    def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
+
+      //test if this dataset is bound to Partitioned Parquet having field positionBin
+      if (Try(dataset("positionBin")).isSuccess) {
+        regions.map(r => "(contigName=" + "\'" + r.referenceName +
+          "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
+          "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
+          "\' and (end > " + r.start + " and start < " + r.end + "))")
+          .mkString(" or ")
+      } else {
+        // if the dataset was not written with field positionBin then exclude it in query
+        regions.map(r => "(contigName=" + "\'" + r.referenceName +
+          "\' and (end > " + r.start + " and start < " + r.end + "))")
+          .mkString(" or ")
+      }
+    }
+    transformDataset((ds: Dataset[U]) => { ds.filter(referenceRegionsToDatasetQueryString(querys)) })
+  }
+
 }
 
 trait GenomicRDDWithLineage[T, U <: GenomicRDDWithLineage[T, U]] extends GenomicRDD[T, U] {
