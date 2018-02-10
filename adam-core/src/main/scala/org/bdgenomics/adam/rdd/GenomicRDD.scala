@@ -2243,6 +2243,11 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
         convFn.call(v, dsX)
       })
   }
+
+  def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
+    transformDataset((ds: Dataset[U]) => ds)
+  }
+
   /*
   def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): V = {
     import scala.util.Try
