@@ -23,49 +23,36 @@ import htsjdk.samtools.util.{ BinaryCodec, BlockCompressedOutputStream }
 import java.io.{ OutputStream, StringWriter, Writer }
 import java.net.URI
 import java.nio.file.Paths
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.LongWritable
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.apache.spark.SparkContext
+import org.apache.spark.{ SparkContext, sql }
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.MetricsContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{ Dataset, Row, SQLContext }
 import org.apache.spark.storage.StorageLevel
-import org.bdgenomics.adam.algorithms.consensus.{
-  ConsensusGenerator,
-  ConsensusGeneratorFromReads,
-  NormalizationUtils
-}
+import org.bdgenomics.adam.algorithms.consensus.{ ConsensusGenerator, ConsensusGeneratorFromReads, NormalizationUtils }
 import org.bdgenomics.adam.converters.AlignmentRecordConverter
 import org.bdgenomics.adam.instrumentation.Timers._
 import org.bdgenomics.adam.models._
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.{
-  AvroRecordGroupGenomicRDD,
-  ADAMSaveAnyArgs,
-  JavaSaveArgs,
-  SAMHeaderWriter
-}
-import org.bdgenomics.adam.rdd.feature.{
-  CoverageRDD,
-  DatasetBoundCoverageRDD,
-  RDDBoundCoverageRDD
-}
+import org.bdgenomics.adam.rdd.{ ADAMSaveAnyArgs, AvroRecordGroupGenomicRDD, JavaSaveArgs, SAMHeaderWriter }
+import org.bdgenomics.adam.rdd.feature.{ CoverageRDD, DatasetBoundCoverageRDD, RDDBoundCoverageRDD }
 import org.bdgenomics.adam.rdd.read.realignment.RealignIndels
 import org.bdgenomics.adam.rdd.read.recalibration.BaseQualityRecalibration
 import org.bdgenomics.adam.rdd.fragment.FragmentRDD
 import org.bdgenomics.adam.rdd.variant.VariantRDD
 import org.bdgenomics.adam.sql.{ AlignmentRecord => AlignmentRecordProduct }
 import org.bdgenomics.adam.serialization.AvroSerializer
+import org.bdgenomics.adam.sql
 import org.bdgenomics.adam.util.{ FileMerger, ReferenceFile }
 import org.bdgenomics.formats.avro._
-import org.bdgenomics.utils.interval.array.{
-  IntervalArray,
-  IntervalArraySerializer
-}
+import org.bdgenomics.utils.interval.array.{ IntervalArray, IntervalArraySerializer }
 import org.seqdoop.hadoop_bam._
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.math.{ abs, min }
@@ -283,7 +270,7 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     copy(processingSteps = newProcessingSteps)
   }
 
-  def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
+  def filterByOverlappingRegionsJP(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
     import scala.util.Try
 
     def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
@@ -303,7 +290,18 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
           .mkString(" or ")
       }*/
     }
-    transformDataset((ds: Dataset[AlignmentRecordProduct]) => { ds.filter(referenceRegionsToDatasetQueryString(querys)) })
+    // transformDataset( (ds: Dataset[AlignmentRecordProduct]) => { ds.filter(referenceRegionsToDatasetQueryString(querys)) } )
+
+    val jp: AlignmentRecordRDD = transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys)).filter((x) => { (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0 }))
+    jp
+
+    //jp.transformDataset(d => d.filter(x  => {(x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0}) )
+
+    //.filter(x  => {(x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0}) )
+
+    //.filter(x:  => (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0))
+    //  .filter(x => (x.readMapped.getOrElse(false)) && x.mapq.getOrElse(0) > 0))
+
   }
 
 }
