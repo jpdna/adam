@@ -270,8 +270,10 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     copy(processingSteps = newProcessingSteps)
   }
 
-  def filterByOverlappingRegionsJP(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
+  override def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): AlignmentRecordRDD = {
     import scala.util.Try
+
+    println("######\n######\n#######\n######\nHere I am in alignmentRecordRDD filterByOverlppingRegions")
 
     def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion]): String = {
 
