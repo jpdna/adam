@@ -310,6 +310,11 @@ case class DatasetBoundFeatureRDD private[rdd] (
       .withColumnRenamed("score", "count")
       .as[Coverage], sequences)
   }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): FeatureRDD = {
+    transformDataset(((d: Dataset[org.bdgenomics.adam.sql.Feature]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
+  }
+
 }
 
 case class RDDBoundFeatureRDD private[rdd] (

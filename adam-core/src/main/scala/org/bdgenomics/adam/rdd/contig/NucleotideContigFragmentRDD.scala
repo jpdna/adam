@@ -157,6 +157,15 @@ case class DatasetBoundNucleotideContigFragmentRDD private[rdd] (
     newSequences: SequenceDictionary): NucleotideContigFragmentRDD = {
     copy(sequences = newSequences)
   }
+
+  override def transformDataset(tFn: Dataset[NucleotideContigFragmentProduct] => Dataset[NucleotideContigFragmentProduct]): NucleotideContigFragmentRDD = {
+    copy(dataset = tFn(dataset))
+  }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): NucleotideContigFragmentRDD = {
+    transformDataset(((d: Dataset[org.bdgenomics.adam.sql.NucleotideContigFragment]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
+  }
+
 }
 
 /**
