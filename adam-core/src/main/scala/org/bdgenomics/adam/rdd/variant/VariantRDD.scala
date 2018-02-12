@@ -167,6 +167,10 @@ case class DatasetBoundVariantRDD private[rdd] (
   def replaceHeaderLines(newHeaderLines: Seq[VCFHeaderLine]): VariantRDD = {
     copy(headerLines = newHeaderLines)
   }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): VariantRDD = {
+    transformDataset((d: Dataset[org.bdgenomics.adam.sql.Variant]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get)))
+  }
 }
 
 case class RDDBoundVariantRDD private[rdd] (
