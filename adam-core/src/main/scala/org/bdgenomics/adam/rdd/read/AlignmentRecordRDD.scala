@@ -271,7 +271,7 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
   }
 
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): AlignmentRecordRDD = {
-    transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get)))
+    transformDataset(((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
   }
 }
 

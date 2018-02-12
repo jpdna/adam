@@ -36,9 +36,11 @@ import org.bdgenomics.adam.rdd.{ MultisampleAvroGenomicRDD, VCFHeaderUtils }
 import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.adam.serialization.AvroSerializer
 import org.bdgenomics.adam.sql.{ Genotype => GenotypeProduct }
+import org.bdgenomics.adam.sql
 import org.bdgenomics.utils.interval.array.{ IntervalArray, IntervalArraySerializer }
 import org.bdgenomics.formats.avro.{ Genotype, Sample }
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
@@ -178,6 +180,11 @@ case class DatasetBoundGenotypeRDD private[rdd] (
   def replaceSamples(newSamples: Iterable[Sample]): GenotypeRDD = {
     copy(samples = newSamples.toSeq)
   }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): GenotypeRDD = {
+    transformDataset((d: Dataset[org.bdgenomics.adam.sql.Genotype]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get)))
+  }
+
 }
 
 case class RDDBoundGenotypeRDD private[rdd] (
