@@ -222,6 +222,10 @@ case class DatasetBoundFragmentRDD private[rdd] (
     newProcessingSteps: Seq[ProcessingStep]): FragmentRDD = {
     copy(processingSteps = newProcessingSteps)
   }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): FragmentRDD = {
+    transformDataset(((d: Dataset[org.bdgenomics.adam.sql.Fragment]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
+  }
 }
 
 case class RDDBoundFragmentRDD private[rdd] (
