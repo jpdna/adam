@@ -3204,25 +3204,4 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     true
   }
 
-  /**
-   * Returns a query string used to filter a dataset based on zero or more ReferenceRegions
-   *
-   * @param regions Zero or more regions to include in a query.
-   * @param partitionSize size of of partitions used when writing parquet, in base pairs.  Defaults to 1000000.
-   * @return Returns a query string used to filter a dataset based on zero or more ReferenceRegions
-   */
-
-  // todo: this function should be removed once all types migrated to use filterByOVerlap from GenomicRDD
-  /*
-  def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, lookBackNumPartitions: Int = 1): String = {
-
-    regions.map(r => "(contigName=" + "\'" + r.referenceName +
-      "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - lookBackNumPartitions) +
-      "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
-      "\' and (end > " + r.start + " and start < " + r.end + "))")
-      .mkString(" or ")
-
-  }
-  */
-
 }
