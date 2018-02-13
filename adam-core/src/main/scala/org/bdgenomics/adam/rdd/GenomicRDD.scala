@@ -2269,21 +2269,15 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
    *
    * @param querys ReferencesRegions to filter against
    * @param optPartitionSize  Optional partitionSize used for partitioned Parquet, defaults to 1000000.
-   * @param optPartitionedLookBackNum Optional number of partitions to look back to find start of an overlapping
-   *                                  region, application to partitioned Parquet backed datasets, defaults to 1
+   * @param optPartitionedLookBackNum Optional number of parquet position bins to look back to find start of a
+   *                                  ReferenceRegion, defaults to 1
    * @return Returns a new DatasetBoundGenomicRDD with ReferenceRegions filter applied.
    */
-  //todo: remove the noOp implementation once all subtypes implement
-  //:
   def filterByOverlappingRegions(querys: Iterable[ReferenceRegion],
                                  optPartitionSize: Option[Int] = Some(1000000),
                                  optPartitionedLookBackNum: Option[Int] = Some(1)): V = {
     filterByOverlappingRegions(querys)
   }
-
-  //= {
-  //  transformDataset((ds: Dataset[U]) => ds) // default implementation could be a noOp
-  //}
 }
 
 trait GenomicRDDWithLineage[T, U <: GenomicRDDWithLineage[T, U]] extends GenomicRDD[T, U] {

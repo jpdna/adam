@@ -23,36 +23,49 @@ import htsjdk.samtools.util.{ BinaryCodec, BlockCompressedOutputStream }
 import java.io.{ OutputStream, StringWriter, Writer }
 import java.net.URI
 import java.nio.file.Paths
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.LongWritable
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.apache.spark.{ SparkContext, sql }
+import org.apache.spark.{ SparkContext }
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.MetricsContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{ Dataset, Row, SQLContext }
 import org.apache.spark.storage.StorageLevel
-import org.bdgenomics.adam.algorithms.consensus.{ ConsensusGenerator, ConsensusGeneratorFromReads, NormalizationUtils }
+import org.bdgenomics.adam.algorithms.consensus.{
+  ConsensusGenerator,
+  ConsensusGeneratorFromReads,
+  NormalizationUtils
+}
 import org.bdgenomics.adam.converters.AlignmentRecordConverter
 import org.bdgenomics.adam.instrumentation.Timers._
 import org.bdgenomics.adam.models._
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.{ ADAMSaveAnyArgs, AvroRecordGroupGenomicRDD, JavaSaveArgs, SAMHeaderWriter }
-import org.bdgenomics.adam.rdd.feature.{ CoverageRDD, DatasetBoundCoverageRDD, RDDBoundCoverageRDD }
+import org.bdgenomics.adam.rdd.{
+  AvroRecordGroupGenomicRDD,
+  ADAMSaveAnyArgs,
+  JavaSaveArgs,
+  SAMHeaderWriter
+}
+import org.bdgenomics.adam.rdd.feature.{
+  CoverageRDD,
+  DatasetBoundCoverageRDD,
+  RDDBoundCoverageRDD
+}
 import org.bdgenomics.adam.rdd.read.realignment.RealignIndels
 import org.bdgenomics.adam.rdd.read.recalibration.BaseQualityRecalibration
 import org.bdgenomics.adam.rdd.fragment.FragmentRDD
 import org.bdgenomics.adam.rdd.variant.VariantRDD
 import org.bdgenomics.adam.sql.{ AlignmentRecord => AlignmentRecordProduct }
 import org.bdgenomics.adam.serialization.AvroSerializer
-import org.bdgenomics.adam.sql
 import org.bdgenomics.adam.util.{ FileMerger, ReferenceFile }
 import org.bdgenomics.formats.avro._
-import org.bdgenomics.utils.interval.array.{ IntervalArray, IntervalArraySerializer }
+import org.bdgenomics.utils.interval.array.{
+  IntervalArray,
+  IntervalArraySerializer
+}
 import org.seqdoop.hadoop_bam._
-
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.math.{ abs, min }
@@ -247,7 +260,6 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
       .option("spark.sql.parquet.compression.codec", compressCodec.toString.toLowerCase())
       .save(filePath)
     saveMetadata(filePath)
-
   }
 
   override def transformDataset(
@@ -270,6 +282,15 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     copy(processingSteps = newProcessingSteps)
   }
 
+  /**
+    * Filters and replaces the underlying dataset based on overlap with any of a Seq of ReferenceRegions.
+    *
+    * @param querys ReferencesRegions to filter against
+    * @param optPartitionSize  Optional partitionSize used for partitioned Parquet, defaults to 1000000.
+    * @param optPartitionedLookBackNum Optional number of parquet position bins to look back to find start of a
+    *                                  ReferenceRegion, defaults to 1
+    * @return Returns a new DatasetBoundAlignmentRecordRDD with ReferenceRegions filter applied.
+    */
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): AlignmentRecordRDD = {
     transformDataset(((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
   }

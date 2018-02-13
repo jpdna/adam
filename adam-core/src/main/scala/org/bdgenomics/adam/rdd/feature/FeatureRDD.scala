@@ -311,6 +311,15 @@ case class DatasetBoundFeatureRDD private[rdd] (
       .as[Coverage], sequences)
   }
 
+  /**
+    * Filters and replaces the underlying dataset based on overlap with any of a Seq of ReferenceRegions.
+    *
+    * @param querys ReferencesRegions to filter against
+    * @param optPartitionSize  Optional partitionSize used for partitioned Parquet, defaults to 1000000.
+    * @param optPartitionedLookBackNum Optional number of parquet position bins to look back to find start of a
+    *                                  ReferenceRegion, defaults to 1
+    * @return Returns a new DatasetBoundFeatureRDD with ReferenceRegions filter applied.
+    */
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion], optPartitionSize: Option[Int] = Some(1000000), optPartitionedLookBackNum: Option[Int] = Some(1)): FeatureRDD = {
     transformDataset(((d: Dataset[org.bdgenomics.adam.sql.Feature]) => d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionSize.get, optPartitionedLookBackNum.get))))
   }
