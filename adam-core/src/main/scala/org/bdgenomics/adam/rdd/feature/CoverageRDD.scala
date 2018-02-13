@@ -120,7 +120,6 @@ case class DatasetBoundCoverageRDD private[rdd] (
     newSequences: SequenceDictionary): CoverageRDD = {
     copy(sequences = newSequences)
   }
-
 }
 
 /**

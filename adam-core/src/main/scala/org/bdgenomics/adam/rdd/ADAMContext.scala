@@ -1882,7 +1882,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
 
-    val reads = loadParquetAlignments(pathName, optPredicate = None, optProjection = None)
+    val reads = loadParquetAlignments(pathName)
 
     val datasetBoundAlignmentRecordRDD = if (regions.nonEmpty) {
       DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
@@ -2285,27 +2285,21 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns a GenotypeRDD.
    */
-  def loadPartitionedParquetGenotypes(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): GenotypeRDD = {
+  def loadPartitionedParquetGenotypes(pathName: String,
+                                      regions: Iterable[ReferenceRegion] = Iterable.empty): GenotypeRDD = {
+
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
-    // load header lines
-    val headers = loadHeaderLines(pathName)
-    // load sequence info
-    val sd = loadAvroSequenceDictionary(pathName)
-    // load avro record group dictionary and convert to samples
-    val samples = loadAvroSamples(pathName)
 
-    val genotypes = ParquetUnboundGenotypeRDD(sc, pathName, sd, samples, headers)
+    val genotypes = loadParquetGenotypes(pathName)
 
-    val datasetBoundGenotypeRDD =
-      if (regions.nonEmpty) {
-        DatasetBoundGenotypeRDD(genotypes.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-          genotypes.sequences,
-          genotypes.samples,
-          genotypes.headerLines)
-      } else {
-        DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines)
-      }
+    val datasetBoundGenotypeRDD = if (regions.nonEmpty) {
+      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines)
+        .filterByOverlappingRegions(regions)
+    } else {
+      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines)
+    }
+
     datasetBoundGenotypeRDD
   }
 
@@ -2355,21 +2349,16 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
 
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
-    val sd = loadAvroSequenceDictionary(pathName)
 
-    // load header lines
-    val headers = loadHeaderLines(pathName)
+    val variants = loadParquetVariants(pathName)
 
-    val variants = ParquetUnboundVariantRDD(sc, pathName, sd, headers)
+    val datasetBoundVariantRDD = if (regions.nonEmpty) {
+      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines)
+        .filterByOverlappingRegions(regions)
+    } else {
+      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines)
+    }
 
-    val datasetBoundVariantRDD =
-      if (regions.nonEmpty) {
-        DatasetBoundVariantRDD(variants.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-          variants.sequences,
-          headers)
-      } else {
-        DatasetBoundVariantRDD(variants.dataset, variants.sequences, headers)
-      }
     datasetBoundVariantRDD
   }
 
@@ -2697,19 +2686,21 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns a FeatureRDD.
    */
-  def loadPartitionedParquetFeatures(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): FeatureRDD = {
+  def loadPartitionedParquetFeatures(pathName: String,
+                                     regions: Iterable[ReferenceRegion] = Iterable.empty): FeatureRDD = {
+
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
-    val sd = loadAvroSequenceDictionary(pathName)
-    val features = ParquetUnboundFeatureRDD(sc, pathName, sd)
 
-    val datasetBoundFeatureRDD =
-      if (!regions.isEmpty) {
-        DatasetBoundFeatureRDD(features.dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-          features.sequences)
-      } else {
-        DatasetBoundFeatureRDD(features.dataset, features.sequences)
-      }
+    val features = loadParquetFeatures(pathName)
+
+    val datasetBoundFeatureRDD = if (regions.nonEmpty) {
+      DatasetBoundFeatureRDD(features.dataset, features.sequences)
+        .filterByOverlappingRegions(regions)
+    } else {
+      DatasetBoundFeatureRDD(features.dataset, features.sequences)
+    }
+
     datasetBoundFeatureRDD
   }
 
@@ -2753,21 +2744,21 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @param regions Optional list of genomic regions to load.
    * @return Returns a NucleotideContigFragmentRDD
    */
-  def loadPartitionedParquetContigFragments(pathName: String, regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
+  def loadPartitionedParquetContigFragments(pathName: String,
+                                            regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
+
     require(isPartitioned(pathName),
       "Input Parquet files (%s) are not partitioned.".format(pathName))
-    val sd = loadAvroSequenceDictionary(pathName)
-    val nucleotideContigFragments = ParquetUnboundNucleotideContigFragmentRDD(sc, pathName, sd)
 
-    val datasetBoundNucleotideContigFragmentRDD =
-      if (regions.nonEmpty) {
-        DatasetBoundNucleotideContigFragmentRDD(nucleotideContigFragments
-          .dataset.filter(referenceRegionsToDatasetQueryString(regions)),
-          nucleotideContigFragments.sequences)
-      } else {
-        DatasetBoundNucleotideContigFragmentRDD(nucleotideContigFragments.dataset,
-          nucleotideContigFragments.sequences)
-      }
+    val contigs = loadParquetContigFragments(pathName)
+
+    val datasetBoundNucleotideContigFragmentRDD = if (regions.nonEmpty) {
+      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences)
+        .filterByOverlappingRegions(regions)
+    } else {
+      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences)
+    }
+
     datasetBoundNucleotideContigFragmentRDD
   }
 
@@ -3219,6 +3210,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    */
 
   // todo: this function should be removed once all types migrated to use filterByOVerlap from GenomicRDD
+  /*
   def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, lookBackNumPartitions: Int = 1): String = {
 
     regions.map(r => "(contigName=" + "\'" + r.referenceName +
@@ -3228,5 +3220,6 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
       .mkString(" or ")
 
   }
+  */
 
 }
