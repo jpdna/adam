@@ -1886,7 +1886,7 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     val reads = loadParquetAlignments(pathName)
 
     val datasetBoundAlignmentRecordRDD = if (regions.nonEmpty) {
-      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps, Some(partitionedBinSize))
+      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps, true, Some(partitionedBinSize), Some(1))
         .filterByOverlappingRegions(regions)
     } else {
       DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)

@@ -2198,7 +2198,68 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
     transformDataset(_.unpersist())
   }
 
+  val isPartitioned: Boolean = false
+  val optPartitionedBinSize: Option[Int] = None
+  val optQueryLookbackNum: Option[Int] = None
+
+  private def referenceRegionsToDatasetQueryString2(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
+
+    //test if this dataset is bound to Partitioned Parquet having field positionBin
+    if (Try(dataset("positionBin")).isSuccess) {
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
+        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    } else { // if no positionBin field is found then construct query without bin optimization
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    }
+  }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion]): V = {
+    if (isPartitioned) {
+      transformDataset((d: Dataset[U]) =>
+        d.filter(referenceRegionsToDatasetQueryString2(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
+    } else {
+      super[GenomicDataset].filterByOverlappingRegions(querys)
+    }
+  }
+
 }
+
+/*
+trait DatasetBoundGenomicDatasetBinned[T, U <: Product, V <: GenomicDataset[T, U, V]] extends DatasetBoundGenomicDataset[T,U,V] {
+
+
+  val optPartitionedBinSize: Option[Int]
+  val optQueryLookbackNum: Option[Int]
+
+  protected def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
+
+    //test if this dataset is bound to Partitioned Parquet having field positionBin
+    if (Try(dataset("positionBin")).isSuccess) {
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
+        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    } else { // if no positionBin field is found then construct query without bin optimization
+      regions.map(r => "(contigName=" + "\'" + r.referenceName +
+        "\' and (end > " + r.start + " and start < " + r.end + "))")
+        .mkString(" or ")
+    }
+
+  }
+
+  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion]: V = {
+    transformDataset((d: Dataset[U]) =>
+      d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
+  }
+
+}
+*/
 
 /**
  * A trait describing a GenomicRDD that also supports the Spark SQL APIs.
