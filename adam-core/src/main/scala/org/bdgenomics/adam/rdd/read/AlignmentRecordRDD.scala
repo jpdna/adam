@@ -285,6 +285,8 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     copy(processingSteps = newProcessingSteps)
   }
 
+  /*
+
   /**
    * Filters and replaces the underlying dataset based on overlap with any of a Seq of ReferenceRegions.
    *
@@ -296,6 +298,7 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
     transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) =>
       d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
   }
+  */
 
 }
 

@@ -2202,7 +2202,7 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
   var optPartitionedBinSize: Option[Int] = None
   var optQueryLookbackNum: Option[Int] = None
 
-  private def referenceRegionsToDatasetQueryString2(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
+  private def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
 
     //test if this dataset is bound to Partitioned Parquet having field positionBin
     if (Try(dataset("positionBin")).isSuccess) {
@@ -2220,56 +2220,14 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
 
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion]): V = {
     if (isPartitioned) {
-      println("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD")
-      log.warn("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD")
-      log.warn("#### Here is isPartitioned:" + isPartitioned)
       transformDataset((d: Dataset[U]) =>
-        d.filter(referenceRegionsToDatasetQueryString2(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
-      //val tFn = (d: Dataset[U]) =>  d.filter(referenceRegionsToDatasetQueryString2(querys, optPartitionedBinSize.get, optQueryLookbackNum.get))
-      //copy(dataset = tFn(dataset))
-
+        d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
     } else {
-      println("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD - callign super")
-      log.warn("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD - callign super")
-      log.warn("#### Here is isPartitioned:" + isPartitioned)
-
       super[GenomicDataset].filterByOverlappingRegions(querys)
     }
   }
 
 }
-
-/*
-trait DatasetBoundGenomicDatasetBinned[T, U <: Product, V <: GenomicDataset[T, U, V]] extends DatasetBoundGenomicDataset[T,U,V] {
-
-
-  val optPartitionedBinSize: Option[Int]
-  val optQueryLookbackNum: Option[Int]
-
-  protected def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
-
-    //test if this dataset is bound to Partitioned Parquet having field positionBin
-    if (Try(dataset("positionBin")).isSuccess) {
-      regions.map(r => "(contigName=" + "\'" + r.referenceName +
-        "\' and positionBin >= \'" + ((scala.math.floor(r.start / partitionSize).toInt) - partitionedLookBackNum) +
-        "\' and positionBin < \'" + (scala.math.floor(r.end / partitionSize).toInt + 1) +
-        "\' and (end > " + r.start + " and start < " + r.end + "))")
-        .mkString(" or ")
-    } else { // if no positionBin field is found then construct query without bin optimization
-      regions.map(r => "(contigName=" + "\'" + r.referenceName +
-        "\' and (end > " + r.start + " and start < " + r.end + "))")
-        .mkString(" or ")
-    }
-
-  }
-
-  override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion]: V = {
-    transformDataset((d: Dataset[U]) =>
-      d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
-  }
-
-}
-*/
 
 /**
  * A trait describing a GenomicRDD that also supports the Spark SQL APIs.
@@ -2398,6 +2356,7 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
       })
   }
 
+  /*
   /**
    * Filters and replaces the underlying dataset based on overlap with any of a Seq of ReferenceRegions.
    *
@@ -2410,6 +2369,8 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Geno
                                         optPartitionedLookBackNum: Option[Int] = Some(1)): V = {
     filterByOverlappingRegions(querys)
   }
+  */
+
 }
 
 trait GenomicRDDWithLineage[T, U <: GenomicRDDWithLineage[T, U]] extends GenomicRDD[T, U] {
@@ -2617,6 +2578,7 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
     saveSequences(filePath)
   }
 
+  /*
   protected def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
 
     //test if this dataset is bound to Partitioned Parquet having field positionBin
@@ -2632,7 +2594,9 @@ abstract class AvroGenomicRDD[T <% IndexedRecord: Manifest, U <: Product, V <: A
         .mkString(" or ")
     }
 
+
   }
+  */
 
   /**
    * Saves RDD as a directory of Parquet files.

@@ -136,8 +136,14 @@ case class DatasetBoundVariantRDD private[rdd] (
   dataset: Dataset[VariantProduct],
   sequences: SequenceDictionary,
   @transient headerLines: Seq[VCFHeaderLine] = DefaultHeaderLines.allHeaderLines,
-  partitionedBinSize: Option[Int] = None) extends VariantRDD
+  isPartitionedIn: Boolean = true,
+  optPartitionedBinSizeIn: Option[Int] = Some(1000000),
+  optQueryLookbackNumIn: Option[Int] = Some(1)) extends VariantRDD
     with DatasetBoundGenomicDataset[Variant, VariantProduct, VariantRDD] {
+
+  isPartitioned = isPartitionedIn
+  optPartitionedBinSize = optPartitionedBinSizeIn
+  optQueryLookbackNum = optQueryLookbackNumIn
 
   protected lazy val optPartitionMap = None
 
@@ -170,7 +176,7 @@ case class DatasetBoundVariantRDD private[rdd] (
   def replaceHeaderLines(newHeaderLines: Seq[VCFHeaderLine]): VariantRDD = {
     copy(headerLines = newHeaderLines)
   }
-
+  /*
   /**
    * Filters and replaces the underlying dataset based on overlap with any of a Seq of ReferenceRegions.
    *
@@ -184,6 +190,7 @@ case class DatasetBoundVariantRDD private[rdd] (
     transformDataset((d: Dataset[org.bdgenomics.adam.sql.Variant]) =>
       d.filter(referenceRegionsToDatasetQueryString(querys, partitionedBinSize.get, optPartitionedLookBackNum.get)))
   }
+  */
 }
 
 case class RDDBoundVariantRDD private[rdd] (

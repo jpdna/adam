@@ -1880,16 +1880,17 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns an AlignmentRecordRDD.
    */
   def loadPartitionedParquetAlignments(pathName: String,
-                                       regions: Iterable[ReferenceRegion] = Iterable.empty): AlignmentRecordRDD = {
+                                       regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                       optQueryBinNumLookback: Option[Int] = Some(1)): AlignmentRecordRDD = {
 
     val partitionedBinSize = getPartitionedBinSize(pathName)
     val reads = loadParquetAlignments(pathName)
 
     val datasetBoundAlignmentRecordRDD = if (regions.nonEmpty) {
-      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps, true, Some(partitionedBinSize), Some(1))
+      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps, true, Some(partitionedBinSize), optQueryBinNumLookback)
         .filterByOverlappingRegions(regions)
     } else {
-      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps)
+      DatasetBoundAlignmentRecordRDD(reads.dataset, reads.sequences, reads.recordGroups, reads.processingSteps, true, Some(partitionedBinSize), optQueryBinNumLookback)
     }
 
     datasetBoundAlignmentRecordRDD
@@ -2287,16 +2288,17 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a GenotypeRDD.
    */
   def loadPartitionedParquetGenotypes(pathName: String,
-                                      regions: Iterable[ReferenceRegion] = Iterable.empty): GenotypeRDD = {
+                                      regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                      optQueryBinNumLookback: Option[Int] = Some(1)): GenotypeRDD = {
 
     val partitionedBinSize = getPartitionedBinSize(pathName)
     val genotypes = loadParquetGenotypes(pathName)
 
     val datasetBoundGenotypeRDD = if (regions.nonEmpty) {
-      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines, Some(partitionedBinSize))
+      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines, true, Some(partitionedBinSize), optQueryBinNumLookback)
         .filterByOverlappingRegions(regions)
     } else {
-      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines, Some(partitionedBinSize))
+      DatasetBoundGenotypeRDD(genotypes.dataset, genotypes.sequences, genotypes.samples, genotypes.headerLines, true, Some(partitionedBinSize), optQueryBinNumLookback)
     }
 
     datasetBoundGenotypeRDD
@@ -2344,16 +2346,17 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a VariantRDD
    */
   def loadPartitionedParquetVariants(pathName: String,
-                                     regions: Iterable[ReferenceRegion] = Iterable.empty): VariantRDD = {
+                                     regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                     optQueryBinNumLookback: Option[Int] = Some(1)): VariantRDD = {
 
     val partitionedBinSize = getPartitionedBinSize(pathName)
     val variants = loadParquetVariants(pathName)
 
     val datasetBoundVariantRDD = if (regions.nonEmpty) {
-      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines, Some(partitionedBinSize))
+      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines, true, Some(partitionedBinSize), optQueryBinNumLookback)
         .filterByOverlappingRegions(regions)
     } else {
-      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines, Some(partitionedBinSize))
+      DatasetBoundVariantRDD(variants.dataset, variants.sequences, variants.headerLines, true, Some(partitionedBinSize), optQueryBinNumLookback)
     }
 
     datasetBoundVariantRDD
@@ -2684,16 +2687,17 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a FeatureRDD.
    */
   def loadPartitionedParquetFeatures(pathName: String,
-                                     regions: Iterable[ReferenceRegion] = Iterable.empty): FeatureRDD = {
+                                     regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                     optQueryBinNumLookback: Option[Int] = Some(1)): FeatureRDD = {
 
     val partitionedBinSize = getPartitionedBinSize(pathName)
     val features = loadParquetFeatures(pathName)
 
     val datasetBoundFeatureRDD = if (regions.nonEmpty) {
-      DatasetBoundFeatureRDD(features.dataset, features.sequences, Some(partitionedBinSize))
+      DatasetBoundFeatureRDD(features.dataset, features.sequences, true, Some(partitionedBinSize), optQueryBinNumLookback)
         .filterByOverlappingRegions(regions)
     } else {
-      DatasetBoundFeatureRDD(features.dataset, features.sequences, Some(partitionedBinSize))
+      DatasetBoundFeatureRDD(features.dataset, features.sequences, true, Some(partitionedBinSize), optQueryBinNumLookback)
     }
 
     datasetBoundFeatureRDD
@@ -2740,16 +2744,17 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
    * @return Returns a NucleotideContigFragmentRDD
    */
   def loadPartitionedParquetContigFragments(pathName: String,
-                                            regions: Iterable[ReferenceRegion] = Iterable.empty): NucleotideContigFragmentRDD = {
+                                            regions: Iterable[ReferenceRegion] = Iterable.empty,
+                                            optQueryBinNumLookback: Option[Int] = Some(1)): NucleotideContigFragmentRDD = {
 
     val partitionedBinSize = getPartitionedBinSize(pathName)
     val contigs = loadParquetContigFragments(pathName)
 
     val datasetBoundNucleotideContigFragmentRDD = if (regions.nonEmpty) {
-      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences, Some(partitionedBinSize))
+      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences, true, Some(partitionedBinSize), optQueryBinNumLookback)
         .filterByOverlappingRegions(regions)
     } else {
-      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences, Some(partitionedBinSize))
+      DatasetBoundNucleotideContigFragmentRDD(contigs.dataset, contigs.sequences, true, Some(partitionedBinSize), optQueryBinNumLookback)
     }
 
     datasetBoundNucleotideContigFragmentRDD
