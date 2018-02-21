@@ -2198,9 +2198,9 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
     transformDataset(_.unpersist())
   }
 
-  val isPartitioned: Boolean = false
-  val optPartitionedBinSize: Option[Int] = None
-  val optQueryLookbackNum: Option[Int] = None
+  var isPartitioned: Boolean = false
+  var optPartitionedBinSize: Option[Int] = None
+  var optQueryLookbackNum: Option[Int] = None
 
   private def referenceRegionsToDatasetQueryString2(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
 
@@ -2220,9 +2220,19 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
 
   override def filterByOverlappingRegions(querys: Iterable[ReferenceRegion]): V = {
     if (isPartitioned) {
+      println("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD")
+      log.warn("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD")
+      log.warn("#### Here is isPartitioned:" + isPartitioned)
       transformDataset((d: Dataset[U]) =>
         d.filter(referenceRegionsToDatasetQueryString2(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
+      //val tFn = (d: Dataset[U]) =>  d.filter(referenceRegionsToDatasetQueryString2(querys, optPartitionedBinSize.get, optQueryLookbackNum.get))
+      //copy(dataset = tFn(dataset))
+
     } else {
+      println("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD - callign super")
+      log.warn("#### Here in filterBuOverlappingRegins in GenomiRDD DatasetBoundAlignmentRecordRDD - callign super")
+      log.warn("#### Here is isPartitioned:" + isPartitioned)
+
       super[GenomicDataset].filterByOverlappingRegions(querys)
     }
   }

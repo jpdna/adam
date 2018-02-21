@@ -238,10 +238,14 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
   sequences: SequenceDictionary,
   recordGroups: RecordGroupDictionary,
   @transient val processingSteps: Seq[ProcessingStep],
-  override val isPartitioned: Boolean = false,
-  override val optPartitionedBinSize: Option[Int] = Some(1000000),
-  override val optQueryLookbackNum: Option[Int] = Some(1)) extends AlignmentRecordRDD
+  isPartitionedIn: Boolean = true,
+  optPartitionedBinSizeIn: Option[Int] = Some(1000000),
+  optQueryLookbackNumIn: Option[Int] = Some(1)) extends AlignmentRecordRDD
     with DatasetBoundGenomicDataset[AlignmentRecord, AlignmentRecordProduct, AlignmentRecordRDD] {
+
+  isPartitioned = isPartitionedIn
+  optPartitionedBinSize = optPartitionedBinSizeIn
+  optQueryLookbackNum = optQueryLookbackNumIn
 
   lazy val rdd = dataset.rdd.map(_.toAvro)
 
@@ -288,12 +292,10 @@ case class DatasetBoundAlignmentRecordRDD private[rdd] (
    * @return Returns a new DatasetBoundAlignmentRecordRDD with ReferenceRegions filter applied.
    */
 
-  /*
-  override def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion]): AlignmentRecordRDD = {
+  def filterDatasetByOverlappingRegions(querys: Iterable[ReferenceRegion]): AlignmentRecordRDD = {
     transformDataset((d: Dataset[org.bdgenomics.adam.sql.AlignmentRecord]) =>
       d.filter(referenceRegionsToDatasetQueryString(querys, optPartitionedBinSize.get, optQueryLookbackNum.get)))
   }
-  */
 
 }
 
