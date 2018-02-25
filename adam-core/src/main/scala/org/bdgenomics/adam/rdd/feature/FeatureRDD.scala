@@ -276,8 +276,15 @@ case class ParquetUnboundFeatureRDD private[rdd] (
 
 case class DatasetBoundFeatureRDD private[rdd] (
   dataset: Dataset[FeatureProduct],
-  sequences: SequenceDictionary) extends FeatureRDD
+  sequences: SequenceDictionary,
+  isPartitionedIn: Boolean = true,
+  optPartitionedBinSizeIn: Option[Int] = Some(1000000),
+  optQueryLookbackNumIn: Option[Int] = Some(1)) extends FeatureRDD
     with DatasetBoundGenomicDataset[Feature, FeatureProduct, FeatureRDD] {
+
+  isPartitioned = isPartitionedIn
+  optPartitionedBinSize = optPartitionedBinSizeIn
+  optQueryLookbackNum = optQueryLookbackNumIn
 
   lazy val rdd = dataset.rdd.map(_.toAvro)
   protected lazy val optPartitionMap = None
