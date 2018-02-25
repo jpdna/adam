@@ -137,10 +137,17 @@ case class ParquetUnboundNucleotideContigFragmentRDD private[rdd] (
 
 case class DatasetBoundNucleotideContigFragmentRDD private[rdd] (
   dataset: Dataset[NucleotideContigFragmentProduct],
-  sequences: SequenceDictionary) extends NucleotideContigFragmentRDD
+  sequences: SequenceDictionary,
+  isPartitionedIn: Boolean = true,
+  optPartitionedBinSizeIn: Option[Int] = Some(1000000),
+  optQueryLookbackNumIn: Option[Int] = Some(1)) extends NucleotideContigFragmentRDD
     with DatasetBoundGenomicDataset[NucleotideContigFragment, NucleotideContigFragmentProduct, NucleotideContigFragmentRDD] {
 
   lazy val rdd: RDD[NucleotideContigFragment] = dataset.rdd.map(_.toAvro)
+
+  isPartitioned = isPartitionedIn
+  optPartitionedBinSize = optPartitionedBinSizeIn
+  optQueryLookbackNum = optQueryLookbackNumIn
 
   protected lazy val optPartitionMap = None
 
