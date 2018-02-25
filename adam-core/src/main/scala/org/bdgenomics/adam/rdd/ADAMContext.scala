@@ -3266,7 +3266,15 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     partitionSizes.head
   }
 
-  def isParitioned(pathName: String): Boolean = {
+
+  /**
+    * Return true if the specified path of Parquet + Avro files is partitioned.
+    *
+    * @param filePath Path in which to look for partitioned flag.
+    * @return Return true if the specified path of Parquet + Avro files is partitioned.
+    * Behavior is undefined if some paths in glob are contain paritioned flag and some do not.
+    */
+  def isPartitioned(pathName: String): Boolean = {
     try {
       getPartitionedBinSize(pathName)
       true
