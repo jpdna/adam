@@ -139,7 +139,7 @@ class TransformGenotypes(val args: TransformGenotypesArgs)
     } else {
       if (args.partitionedBinSize > 0) {
         if (genotypes.sequences.isEmpty) {
-          log.warn("This dataset is not aligned and therefore will not benefit from being saed as a partitioned dataaset")
+          log.warn("This dataset is not aligned and therefore will not benefit from being saved as a partitioned dataset")
         }
         maybeSort(maybeCoalesce(genotypes)).saveAsPartitionedParquet(args.outputPath, partitionSize = args.partitionedBinSize)
       } else {

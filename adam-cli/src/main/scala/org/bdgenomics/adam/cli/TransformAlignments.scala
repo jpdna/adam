@@ -566,7 +566,7 @@ class TransformAlignments(protected val args: TransformAlignmentsArgs) extends B
 
     if (args.partitionedBinSize > 0) {
       if (outputRdd.sequences.isEmpty) {
-        log.warn("This dataset is not aligned and therefore will not benefit from being saed as a partitioned dataaset")
+        log.warn("This dataset is not aligned and therefore will not benefit from being saved as a partitioned dataset")
       }
       outputRdd.saveAsPartitionedParquet(args.outputPath, partitionSize = args.partitionedBinSize)
     } else {
