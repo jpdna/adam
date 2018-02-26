@@ -2197,9 +2197,14 @@ trait DatasetBoundGenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] 
     transformDataset(_.unpersist())
   }
 
+  /*
   var isPartitioned: Boolean = false
   var optPartitionedBinSize: Option[Int] = None
   var optQueryLookbackNum: Option[Int] = None
+  */
+  val isPartitioned: Boolean
+  val optPartitionedBinSize: Option[Int]
+  val optQueryLookbackNum: Option[Int]
 
   private def referenceRegionsToDatasetQueryString(regions: Iterable[ReferenceRegion], partitionSize: Int = 1000000, partitionedLookBackNum: Int = 1): String = {
 
