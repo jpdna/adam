@@ -2990,6 +2990,30 @@ class ADAMContext(@transient val sc: SparkContext) extends Serializable with Log
     if (regions.nonEmpty) variantsDatasetBound.filterByOverlappingRegions(regions) else variantsDatasetBound
   }
 
+  def loadDeltaLakeVariants(pathName: String,
+                            regions: Iterable[ReferenceRegion] = Iterable.empty,
+                            optLookbackPartitions: Option[Int] = Some(1)): VariantDataset = {
+
+    print("Here in loadDeltaLakeVariants: ")
+    val sd = loadAvroSequenceDictionary(pathName)
+    val headers = loadHeaderLines(pathName)
+
+    //val partitionedBinSize = getPartitionBinSize(pathName)
+    val partitionedBinSize = 1000000
+    val encoder = org.apache.spark.sql.Encoders.product[VariantProduct]
+    val variants = spark.read.format("delta").load(pathName).as(encoder)
+
+    val variantsDatasetBound = DatasetBoundVariantDataset(variants,
+      sd,
+      headers,
+      isPartitioned = true,
+      Some(partitionedBinSize),
+      optLookbackPartitions
+    )
+
+    if (regions.nonEmpty) variantsDatasetBound.filterByOverlappingRegions(regions) else variantsDatasetBound
+  }
+
   /**
    * Load paired unaligned alignments grouped by sequencing fragment
    * from interleaved FASTQ into an FragmentDataset.

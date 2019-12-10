@@ -282,6 +282,11 @@
       <groupId>org.bdgenomics.adam</groupId>
       <artifactId>adam-codegen-spark2_${scala.version.prefix}</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.delta</groupId>
+      <artifactId>delta-core_2.11</artifactId>
+      <version>0.4.0</version>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>

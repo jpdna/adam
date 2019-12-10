@@ -390,6 +390,21 @@ trait GenomicDataset[T, U <: Product, V <: GenomicDataset[T, U, V]] extends Logg
     saveMetadata(pathName)
   }
 
+  def saveAsDeltaLake(pathName: String,
+                      compressionCodec: CompressionCodecName = CompressionCodecName.GZIP,
+                      partitionSize: Int = 1000000) {
+    info("Saving directly as Hive-partitioned Parquet from SQL. " +
+      "Options other than compression codec are ignored.")
+    val df = toDF()
+    df.withColumn("positionBin", floor(df("start") / partitionSize))
+      .write
+      .format("delta")
+      .partitionBy("referenceName", "positionBin")
+      .save(pathName)
+    //writePartitionedParquetFlag(pathName, partitionSize)
+    saveMetadata(pathName)
+  }
+
   /**
    * The RDD of genomic data that we are wrapping.
    */
